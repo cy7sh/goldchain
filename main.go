@@ -1,13 +1,23 @@
 package main
 
 import (
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"net"
+	"time"
 
 	"github.com/miekg/dns"
+	"github.com/singurty/goldchain/wire"
 )
 
 func main() {
 	nodes := getNodes()
+	fmt.Printf("got %v nodes\n", len(nodes))
+	for _, node := range nodes {
+		fmt.Printf("connecting to %v\n", node)
+		connectToNode(node)
+	}
 }
 
 func getNodes() []net.IP {
@@ -24,4 +34,29 @@ func getNodes() []net.IP {
 		}
 	}
 	return nodes
+}
+
+func connectToNode(node net.IP) error {
+	conn, err := net.Dial("tcp", node.String() + ":8333")
+	if err != nil {
+		return err
+	}
+	nonceBig, err := rand.Int(rand.Reader, big.NewInt(2^64))
+	if err != nil {
+		return err
+	}
+	nonce := nonceBig.Uint64()
+	msg := wire.VersionMsg{
+		Version: 70015, // Bitcoin Core 0.13.2
+		Services: 0x01, // NODE_NETWORK
+		Timestamp: time.Now().Unix(),
+		Addr_recv: wire.NetAddr{Services: 0x00, Address: node.To16(), Port: 8333,},
+		Nonce: nonce,
+		User_agent: "goldchain",
+		Start_height: 0,
+		Relay: true,
+	}
+	fmt.Println("sending version message")
+	msg.Write(conn)
+	return nil
 }
