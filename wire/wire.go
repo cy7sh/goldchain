@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"errors"
 )
 
 type VersionMsg struct {
@@ -135,6 +136,22 @@ func writeVarInt(w io.Writer, integer int) error {
 	return writeElement(w, uint64(integer))
 }
 
+func readVarInt(integer []byte) (int, int, error) {
+	if integer[0] < 0xfd {
+		return int(integer[0]), 1, nil
+	}
+	if integer[0] == 0xfd {
+		return int(binary.LittleEndian.Uint16(integer[:2])), 2, nil
+	}
+	if integer[0] == 0xfe {
+		return int(binary.LittleEndian.Uint32(integer[:4])), 4, nil
+	}
+	if integer[0] == 0xff {
+		return int(binary.LittleEndian.Uint64(integer[:8])), 8, nil
+	}
+	return 0, 0, errors.New("invalid var int")
+}
+
 func writeVarStr(w io.Writer, element string) error {
 	err := writeVarInt(w, len(element))
 	if err != nil {
@@ -142,6 +159,14 @@ func writeVarStr(w io.Writer, element string) error {
 	}
 	_, err = w.Write([]byte(element))
 	return err
+}
+
+func ReadVarStr(str []byte) (string, int, error) {
+	length, size, err := readVarInt(str)
+	if err != nil {
+		return "", 0, err
+	}
+	return string(str[size:size+length]), size + length, nil
 }
 
 func (ver *VersionMsg) Write(w io.Writer) error {

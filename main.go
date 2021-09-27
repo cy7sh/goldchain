@@ -1,26 +1,25 @@
 package main
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math/big"
 	"net"
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/singurty/goldchain/wire"
 	"github.com/singurty/goldchain/peer"
 )
+
+var peers []peer.Peer
 
 func main() {
 	nodes := getNodes()
 	fmt.Printf("got %v nodes\n", len(nodes))
 	for _, node := range nodes {
-		fmt.Printf("connecting to %v\n", node)
 		go connectToNode(node)
 	}
 	for {
-
+		fmt.Printf("total valid peers: %v\n", len(peers))
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -40,35 +39,15 @@ func getNodes() []net.IP {
 	return nodes
 }
 
-func connectToNode(node net.IP) error {
-	conn, err := net.Dial("tcp", node.String() + ":8333")
+func connectToNode(node net.IP) {
+	conn, err := net.Dial("tcp", node.String()+":8333")
 	if err != nil {
-		return err
+		return
 	}
 	peer := peer.Peer{Conn: conn}
-	go peer.Handler()
-	nonceBig, err := rand.Int(rand.Reader, big.NewInt(2^64))
-	if err != nil {
-		return err
+	err = peer.Start()
+	// is a valid peer
+	if err == nil {
+		peers = append(peers, peer)
 	}
-	nonce := nonceBig.Uint64()
-	msg := wire.VersionMsg{
-		Version: 31800,
-		Services: 0x00,
-		Timestamp: time.Now().Unix(),
-		Addr_recv: wire.NetAddr{Services: 0x00, Address: node.To16(), Port: 8333,},
-		Addr_from: wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
-		Nonce: nonce,
-		User_agent: byte(0x00),
-	}
-	fmt.Println("sending version message")
-	err = msg.Write(conn)
-	if err != nil {
-		panic(err)
-	}
-	return nil
-}
-
-func peerHandler() {
-
 }
