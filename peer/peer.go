@@ -23,6 +23,7 @@ type Peer struct {
 	user_agent string
 	start_height int32
 	relay bool
+	nonce uint64 // for ping pong
 }
 
 func (p *Peer) Start()  {
@@ -37,15 +38,32 @@ func (p *Peer) handler() {
 	listen := make(chan string)
 	go p.listener(listen)
 	for {
-		command := <-listen
-		switch command {
-		case "version":
-			// perhaps alive
-			p.Alive = true
-			Peers = append(Peers, p)
-			err := p.sendVerack()
-			if err != nil {
-				fmt.Println(err)
+		select {
+		case command := <-listen:
+			switch command {
+			case "version":
+				// perhaps alive
+				p.Alive = true
+				Peers = append(Peers, p)
+				err := p.sendVerack()
+				if err != nil {
+					fmt.Println(err)
+				}
+			case "ping":
+
+			}
+		case <-time.After(10 * time.Minute):
+			p.sendPing()
+			select {
+			case command := <-listen:
+				switch command {
+				case "pong":
+					break
+				default:
+					listen <- command
+				}
+			case <-time.After(10 * time.Minute):
+				p.Alive = false
 			}
 		}
 	}
@@ -80,9 +98,9 @@ func (p *Peer) listener(c chan string) {
 //			fmt.Println("corrupt payload")
 			continue
 		}
-		c <- command
 		switch command {
 		case "version":
+			c <- "version"
 //			fmt.Println("parsing version")
 			p.version = int32(binary.LittleEndian.Uint32(payload[:4]))
 			p.services = binary.LittleEndian.Uint64(payload[4:12])
@@ -102,6 +120,14 @@ func (p *Peer) listener(c chan string) {
 				}
 			}
 			fmt.Printf("%v, %x, %v, %v, %v\n", p.version, p.services, p.start_height, p.user_agent, p.relay)
+		case "ping":
+			p.nonce = binary.LittleEndian.Uint64(payload[:8])
+			c <- "ping"
+		case "pong":
+			nonce := binary.LittleEndian.Uint64(payload[:8])
+			if p.nonce == nonce {
+				c <- "pong"
+			}
 		}
 	}
 }
@@ -129,6 +155,18 @@ func (p *Peer) sendVersion() error {
 }
 
 func (p *Peer) sendVerack() error {
-	wire.WriteVerackMsg(p.Conn)
-	return nil
+	return wire.WriteVerackMsg(p.Conn)
+}
+
+func (p *Peer) sendPing() error {
+	nonceBig, err := rand.Int(rand.Reader, big.NewInt(2^64))
+	if err != nil {
+		return err
+	}
+	p.nonce = nonceBig.Uint64()
+	return wire.WritePing(p.Conn, p.nonce)
+}
+
+func (p *Peer) sendPong() error {
+	return wire.WritePong(p.Conn, p.nonce)
 }

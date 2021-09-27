@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"io"
 	"net"
@@ -170,31 +169,46 @@ func ReadVarStr(str []byte) (string, int, error) {
 	return string(str[size:size+length]), size + length, nil
 }
 
-func writeMagic(w io.Writer) error {
-	err := binary.Write(w, binary.LittleEndian, uint32(0xD9B4BEF9))
+func writeMsg(w io.Writer, command string, payload []byte) error {
+	var msgBuffer bytes.Buffer
+	err := binary.Write(&msgBuffer, binary.LittleEndian, uint32(0xD9B4BEF9))
 	if err != nil {
 		return err
 	}
+	_, err = msgBuffer.Write([]byte(command))
+	if err != nil {
+		return err
+	}
+	_, err = msgBuffer.Write(make([]byte, 12 - len(command)))
+	if err != nil {
+		return err
+	}
+	err = writeElement(&msgBuffer, uint32(len(payload)))
+	if err != nil {
+		return err
+	}
+	singleHash := sha256.Sum256(payload)
+	doubleHash := sha256.Sum256(singleHash[:])
+	err = binary.Write(&msgBuffer, binary.LittleEndian, doubleHash[:4])
+	if err != nil {
+		return err
+	}
+	_, err = msgBuffer.Write(payload)
+	if err != nil {
+		return err
+	}
+	msg := make([]byte, msgBuffer.Len())
+	_, err = msgBuffer.Read(msg)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(msg)
 	return nil
 }
 
 func (ver *VersionMsg) Write(w io.Writer) error {
-	var msgBuffer bytes.Buffer
-	err := writeMagic(&msgBuffer)
-	if err != nil {
-		return err
-	}
-	_, err = msgBuffer.Write([]byte("version"))
-	if err != nil {
-		return err
-	}
-	padding := [5]byte{}
-	_, err = msgBuffer.Write(padding[:])
-	if err != nil {
-		return err
-	}
 	var payloadBuffer bytes.Buffer
-	err = writeElements(&payloadBuffer, ver.Version, ver .Services, ver.Timestamp)
+	err := writeElements(&payloadBuffer, ver.Version, ver .Services, ver.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -219,65 +233,35 @@ func (ver *VersionMsg) Write(w io.Writer) error {
 		return err
 	}
 	payload := make([]byte, payloadBuffer.Len())
-	payloadSize, err := payloadBuffer.Read(payload)
+	_, err = payloadBuffer.Read(payload)
 	if err != nil {
 		return err
 	}
-	err = writeElement(&msgBuffer, uint32(payloadSize))
-	if err != nil {
-		return err
-	}
-	singleHash := sha256.Sum256(payload)
-	doubleHash := sha256.Sum256(singleHash[:])
-	err = binary.Write(&msgBuffer, binary.LittleEndian, doubleHash[:4])
-	if err != nil {
-		return err
-	}
-	_, err = msgBuffer.Write(payload)
-	if err != nil {
-		return err
-	}
-	msg := make([]byte, msgBuffer.Len())
-	_, err = msgBuffer.Read(msg)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(msg)
-	return err
+	return writeMsg(w, "version", payload)
 }
 
 func WriteVerackMsg(w io.Writer) error {
-	var msgBuffer bytes.Buffer
-	err := writeMagic(&msgBuffer)
+	return writeMsg(w, "veract", []byte{})
+}
+
+func writePingPong(w io.Writer, nonce uint64, command string) error {
+	var payloadBuffer bytes.Buffer
+	err := writeElement(&payloadBuffer, nonce)
 	if err != nil {
 		return err
 	}
-	_, err = msgBuffer.Write([]byte("verack"))
+	payload := make([]byte, payloadBuffer.Len())
+	_, err = payloadBuffer.Read(payload)
 	if err != nil {
 		return err
 	}
-	padding := [6]byte{}
-	_, err = msgBuffer.Write(padding[:])
-	if err != nil {
-		return err
-	}
-	err = writeElement(&msgBuffer, uint32(0))
-	if err != nil {
-		return err
-	}
-	checksum, err := hex.DecodeString("5df6e0e2")
-	if err != nil {
-		return err
-	}
-	_, err = msgBuffer.Write(checksum)
-	if err != nil {
-		return err
-	}
-	msg := make([]byte, msgBuffer.Len())
-	_, err = msgBuffer.Read(msg)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(msg)
-	return err
+	return writeMsg(w, command, payload)
+}
+
+func WritePing(w io.Writer, nonce uint64) error {
+	return writePingPong(w, nonce, "ping")
+}
+
+func WritePong(w io.Writer, nonce uint64) error {
+	return writePingPong(w, nonce, "pong")
 }
