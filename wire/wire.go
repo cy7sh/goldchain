@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 )
@@ -146,11 +145,20 @@ func writeVarStr(w io.Writer, element string) error {
 
 func (ver *VersionMsg) Write(w io.Writer) error {
 	var msgBuffer bytes.Buffer
-	binary.Write(&msgBuffer, binary.LittleEndian, 0xD9B4BEF9)
-	binary.Write(&msgBuffer, binary.LittleEndian, "version")
-	binary.Write(&msgBuffer, binary.LittleEndian, 0x0000000000)
+	err := binary.Write(&msgBuffer, binary.LittleEndian, uint32(0xD9B4BEF9))
+	if err != nil {
+		return err
+	}
+	err = binary.Write(&msgBuffer, binary.LittleEndian, []byte("version"))
+	if err != nil {
+		return err
+	}
+	err = binary.Write(&msgBuffer, binary.LittleEndian, [5]byte{})
+	if err != nil {
+		return err
+	}
 	var payloadBuffer bytes.Buffer
-	err := writeElements(&payloadBuffer, ver.Version, ver .Services, ver.Timestamp)
+	err = writeElements(&payloadBuffer, ver.Version, ver .Services, ver.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -171,17 +179,25 @@ func (ver *VersionMsg) Write(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	writeElement(&msgBuffer, uint32(payloadSize))
-	singleHash := sha256.Sum256(payload)
-	doubleHash := sha256.Sum256(singleHash[:])
-	binary.Write(&msgBuffer, binary.LittleEndian, doubleHash[:4])
-	msgBuffer.Write(payload)
-	msg := make([]byte, msgBuffer.Len())
-	msgSize, err := msgBuffer.Read(msg)
+	err = writeElement(&msgBuffer, uint32(payloadSize))
 	if err != nil {
 		return err
 	}
-	fmt.Printf("version message is %v bytes\n", msgSize)
+	singleHash := sha256.Sum256(payload)
+	doubleHash := sha256.Sum256(singleHash[:])
+	err = binary.Write(&msgBuffer, binary.LittleEndian, doubleHash[:4])
+	if err != nil {
+		return err
+	}
+	_, err = msgBuffer.Write(payload)
+	if err != nil {
+		return err
+	}
+	msg := make([]byte, msgBuffer.Len())
+	_, err = msgBuffer.Read(msg)
+	if err != nil {
+		return err
+	}
 	_, err = w.Write(msg)
 	return err
 }
