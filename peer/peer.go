@@ -13,7 +13,10 @@ import (
 	"github.com/singurty/goldchain/wire"
 )
 
+var Peers []*Peer
+
 type Peer struct {
+	Alive bool
 	Conn net.Conn
 	version int32
 	services uint64
@@ -22,13 +25,12 @@ type Peer struct {
 	relay bool
 }
 
-func (p *Peer) Start() error {
+func (p *Peer) Start()  {
 	go p.handler()
 	err := p.sendVersion()
 	if err != nil {
-		return err
+		fmt.Print(err)
 	}
-	return nil
 }
 
 func (p *Peer) handler() {
@@ -38,6 +40,9 @@ func (p *Peer) handler() {
 		command := <-listen
 		switch command {
 		case "version":
+			// perhaps alive
+			p.Alive = true
+			Peers = append(Peers, p)
 			err := p.sendVerack()
 			if err != nil {
 				fmt.Println(err)

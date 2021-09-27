@@ -9,8 +9,6 @@ import (
 	"github.com/singurty/goldchain/peer"
 )
 
-var peers []peer.Peer
-
 func main() {
 	nodes := getNodes()
 	fmt.Printf("got %v nodes\n", len(nodes))
@@ -18,7 +16,7 @@ func main() {
 		go connectToNode(node)
 	}
 	for {
-		fmt.Printf("total valid peers: %v\n", len(peers))
+		fmt.Printf("total valid peers: %v\n", len(peer.Peers))
 		time.Sleep(5 * time.Second)
 	}
 }
@@ -45,9 +43,5 @@ func connectToNode(node net.IP) {
 		return
 	}
 	peer := peer.Peer{Conn: conn}
-	err = peer.Start()
-	// is a valid peer
-	if err == nil {
-		peers = append(peers, peer)
-	}
+	peer.Start()
 }
