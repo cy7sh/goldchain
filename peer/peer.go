@@ -24,7 +24,7 @@ type Peer struct {
 
 func (p *Peer) Start() error {
 	go p.handler()
-	err := p.sendVersionMsg()
+	err := p.sendVersion()
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,10 @@ func (p *Peer) handler() {
 		command := <-listen
 		switch command {
 		case "version":
-
+			err := p.sendVerack()
+			if err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 }
@@ -57,10 +60,10 @@ func (p *Peer) listener(c chan string) {
 			continue
 		}
 		command := string(bytes.TrimRight(buf[4:16], "\x00"))
-		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
+//		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
 		length := binary.LittleEndian.Uint32(buf[16:20])
 		if length == 0 {
-			fmt.Println("empty payload")
+//			fmt.Println("empty payload")
 			continue
 		}
 		checksum := buf[20:24]
@@ -69,13 +72,13 @@ func (p *Peer) listener(c chan string) {
 		singleHash := sha256.Sum256(payload)
 		doubleHash := sha256.Sum256(singleHash[:])
 		if !bytes.Equal(checksum, doubleHash[:4]){
-			fmt.Println("corrupt payload")
+//			fmt.Println("corrupt payload")
 			continue
 		}
+		c <- command
 		switch command {
 		case "version":
-			c <- "version"
-			fmt.Println("parsing version")
+//			fmt.Println("parsing version")
 			p.version = int32(binary.LittleEndian.Uint32(payload[:4]))
 			p.services = binary.LittleEndian.Uint64(payload[4:12])
 			user_agent, size, err := wire.ReadVarStr(payload[80:])
@@ -98,7 +101,7 @@ func (p *Peer) listener(c chan string) {
 	}
 }
 
-func (p *Peer) sendVersionMsg() error {
+func (p *Peer) sendVersion() error {
 	nonceBig, err := rand.Int(rand.Reader, big.NewInt(2^64))
 	if err != nil {
 		return err
@@ -120,6 +123,7 @@ func (p *Peer) sendVersionMsg() error {
 	return nil
 }
 
-func (p *Peer) handleVersionMsg(payload []byte) {
-
+func (p *Peer) sendVerack() error {
+	wire.WriteVerackMsg(p.Conn)
+	return nil
 }

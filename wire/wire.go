@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"errors"
 	"io"
 	"net"
-	"errors"
 )
 
 type VersionMsg struct {
@@ -169,17 +170,26 @@ func ReadVarStr(str []byte) (string, int, error) {
 	return string(str[size:size+length]), size + length, nil
 }
 
+func writeMagic(w io.Writer) error {
+	err := binary.Write(w, binary.LittleEndian, uint32(0xD9B4BEF9))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (ver *VersionMsg) Write(w io.Writer) error {
 	var msgBuffer bytes.Buffer
-	err := binary.Write(&msgBuffer, binary.LittleEndian, uint32(0xD9B4BEF9))
+	err := writeMagic(&msgBuffer)
 	if err != nil {
 		return err
 	}
-	err = binary.Write(&msgBuffer, binary.LittleEndian, []byte("version"))
+	_, err = msgBuffer.Write([]byte("version"))
 	if err != nil {
 		return err
 	}
-	err = binary.Write(&msgBuffer, binary.LittleEndian, [5]byte{})
+	padding := [5]byte{}
+	_, err = msgBuffer.Write(padding[:])
 	if err != nil {
 		return err
 	}
@@ -224,6 +234,42 @@ func (ver *VersionMsg) Write(w io.Writer) error {
 		return err
 	}
 	_, err = msgBuffer.Write(payload)
+	if err != nil {
+		return err
+	}
+	msg := make([]byte, msgBuffer.Len())
+	_, err = msgBuffer.Read(msg)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(msg)
+	return err
+}
+
+func WriteVerackMsg(w io.Writer) error {
+	var msgBuffer bytes.Buffer
+	err := writeMagic(&msgBuffer)
+	if err != nil {
+		return err
+	}
+	_, err = msgBuffer.Write([]byte("verack"))
+	if err != nil {
+		return err
+	}
+	padding := [6]byte{}
+	_, err = msgBuffer.Write(padding[:])
+	if err != nil {
+		return err
+	}
+	err = writeElement(&msgBuffer, uint32(0))
+	if err != nil {
+		return err
+	}
+	checksum, err := hex.DecodeString("5df6e0e2")
+	if err != nil {
+		return err
+	}
+	_, err = msgBuffer.Write(checksum)
 	if err != nil {
 		return err
 	}
