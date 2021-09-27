@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 )
@@ -172,11 +173,15 @@ func (ver *VersionMsg) Write(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	msg := make([]byte, b.Len())
-	_, err = b.Read(msg)
+	buf.Flush()
+	bReader := bufio.NewReader(&b)
+	msg := make([]byte, bReader.Size())
+	msgSize, err := bReader.Read(msg)
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(msg)
+	fmt.Printf("version msg is %v bytes\n", msgSize)
+	count, err := w.Write(msg)
+	fmt.Printf("sent %v bytes\n", count)
 	return err
 }
