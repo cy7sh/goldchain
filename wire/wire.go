@@ -16,6 +16,7 @@ type VersionMsg struct {
 	Addr_from NetAddr
 	Nonce uint64
 	User_agent byte
+	Start_height int32
 }
 
 type NetAddr struct {
@@ -171,6 +172,14 @@ func (ver *VersionMsg) Write(w io.Writer) error {
 		return err
 	}
 	err = writeElements(&payloadBuffer, ver.Nonce, ver.User_agent)
+	if err != nil {
+		return err
+	}
+	_, err = payloadBuffer.Write([]byte{ver.User_agent})
+	if err != nil {
+		return err
+	}
+	err = writeElement(&payloadBuffer, int32(ver.Start_height))
 	if err != nil {
 		return err
 	}
