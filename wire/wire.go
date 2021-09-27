@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -144,30 +145,43 @@ func writeVarStr(w io.Writer, element string) error {
 }
 
 func (ver *VersionMsg) Write(w io.Writer) error {
-	var b bytes.Buffer
-	err := writeElements(&b, ver.Version, ver .Services, ver.Timestamp)
+	var msgBuffer bytes.Buffer
+	binary.Write(&msgBuffer, binary.LittleEndian, 0xD9B4BEF9)
+	binary.Write(&msgBuffer, binary.LittleEndian, "version")
+	binary.Write(&msgBuffer, binary.LittleEndian, 0x0000000000)
+	var payloadBuffer bytes.Buffer
+	err := writeElements(&payloadBuffer, ver.Version, ver .Services, ver.Timestamp)
 	if err != nil {
 		return err
 	}
-	err = writeNetaddress(&b, ver.Addr_recv)
+	err = writeNetaddress(&payloadBuffer, ver.Addr_recv)
 	if err != nil {
 		return err
 	}
-	err = writeNetaddress(&b, ver.Addr_from)
+	err = writeNetaddress(&payloadBuffer, ver.Addr_from)
 	if err != nil {
 		return err
 	}
-	err = writeElements(&b, ver.Nonce, ver.User_agent)
+	err = writeElements(&payloadBuffer, ver.Nonce, ver.User_agent)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("version msg is %v bytes\n", b.Len())
-	msg := make([]byte, b.Len())
-	msgSize, err := b.Read(msg)
+	payload := make([]byte, payloadBuffer.Len())
+	payloadSize, err := payloadBuffer.Read(payload)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("version msg is %v bytes\n", msgSize)
+	writeElement(&msgBuffer, uint32(payloadSize))
+	singleHash := sha256.Sum256(payload)
+	doubleHash := sha256.Sum256(singleHash[:])
+	binary.Write(&msgBuffer, binary.LittleEndian, doubleHash[:4])
+	msgBuffer.Write(payload)
+	msg := make([]byte, msgBuffer.Len())
+	msgSize, err := msgBuffer.Read(msg)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("version message is %v bytes\n", msgSize)
 	_, err = w.Write(msg)
 	return err
 }
