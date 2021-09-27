@@ -18,6 +18,6 @@ func (p *Peer) Handler() {
 			fmt.Println("connection closed with", p.Conn.RemoteAddr())
 			break
 		}
-		fmt.Printf("read %v bytes from %v\n", readLen, p.Conn.RemoteAddr().String())
+		fmt.Printf("read %v bytes from %v\n", readLen, p.Conn.RemoteAddr())
 	}
 }

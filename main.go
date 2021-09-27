@@ -53,14 +53,13 @@ func connectToNode(node net.IP) error {
 	}
 	nonce := nonceBig.Uint64()
 	msg := wire.VersionMsg{
-		Version: 70015, // Bitcoin Core 0.13.2
-		Services: 0x01, // NODE_NETWORK
+		Version: 106, // Bitcoin Core 0.1.6
+		Services: 0x00, // Unnamed
 		Timestamp: time.Now().Unix(),
 		Addr_recv: wire.NetAddr{Services: 0x00, Address: node.To16(), Port: 8333,},
+		Addr_from: wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
 		Nonce: nonce,
-		User_agent: "/Satoshi:0.21.1/",
-		Start_height: 0,
-		Relay: true,
+		User_agent: byte(0x00),
 	}
 	fmt.Println("sending version message")
 	err = msg.Write(conn)

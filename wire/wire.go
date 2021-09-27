@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -16,9 +15,7 @@ type VersionMsg struct {
 	Addr_recv NetAddr
 	Addr_from NetAddr
 	Nonce uint64
-	User_agent string
-	Start_height int32
-	Relay bool
+	User_agent byte
 }
 
 type NetAddr struct {
@@ -77,7 +74,7 @@ func writeElement(w io.Writer, element interface{}) error {
 			return err
 		}
 	case [16]byte:
-		_, err := w.Write(e[:])
+		err := binary.Write(w, binary.BigEndian, e[:])
 		if err != nil {
 			return err
 		}
@@ -148,40 +145,29 @@ func writeVarStr(w io.Writer, element string) error {
 
 func (ver *VersionMsg) Write(w io.Writer) error {
 	var b bytes.Buffer
-	buf := bufio.NewWriter(&b)
-	err := writeElements(buf, ver.Version, ver .Services, ver.Timestamp)
+	err := writeElements(&b, ver.Version, ver .Services, ver.Timestamp)
 	if err != nil {
 		return err
 	}
-	err = writeNetaddress(buf, ver.Addr_recv)
+	err = writeNetaddress(&b, ver.Addr_recv)
 	if err != nil {
 		return err
 	}
-	err = writeNetaddress(buf, ver.Addr_from)
+	err = writeNetaddress(&b, ver.Addr_from)
 	if err != nil {
 		return err
 	}
-	err = writeElement(buf, ver.Nonce)
+	err = writeElements(&b, ver.Nonce, ver.User_agent)
 	if err != nil {
 		return err
 	}
-	err = writeVarStr(buf, ver.User_agent)
-	if err != nil {
-		return err
-	}
-	err = writeElements(buf, ver.Start_height, ver.Relay)
-	if err != nil {
-		return err
-	}
-	buf.Flush()
-	bReader := bufio.NewReader(&b)
-	msg := make([]byte, bReader.Size())
-	msgSize, err := bReader.Read(msg)
+	fmt.Printf("version msg is %v bytes\n", b.Len())
+	msg := make([]byte, b.Len())
+	msgSize, err := b.Read(msg)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("version msg is %v bytes\n", msgSize)
-	count, err := w.Write(msg)
-	fmt.Printf("sent %v bytes\n", count)
+	_, err = w.Write(msg)
 	return err
 }
