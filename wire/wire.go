@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/binary"
 	"io"
 	"net"
@@ -37,19 +39,31 @@ func writeElement(w io.Writer, element interface{}) error {
 	case int32:
 		b := scratch[0:4]
 		binary.LittleEndian.PutUint32(b, uint32(e))
-		w.Write(b)
+		_, err := w.Write(b)
+		if err != nil {
+			return err
+		}
 	case int64:
 		b := scratch[0:8]
 		binary.LittleEndian.PutUint64(b, uint64(e))
-		w.Write(b)
+		_, err := w.Write(b)
+		if err != nil {
+			return err
+		}
 	case uint32:
 		b := scratch[0:4]
 		binary.LittleEndian.PutUint32(b, e)
-		w.Write(b)
+		_, err := w.Write(b)
+		if err != nil {
+			return err
+		}
 	case uint64:
 		b := scratch[0:8]
 		binary.LittleEndian.PutUint64(b, e)
-		w.Write(b)
+		_, err := w.Write(b)
+		if err != nil {
+			return err
+		}
 	case bool:
 		b := scratch[0:1]
 		if e {
@@ -57,8 +71,15 @@ func writeElement(w io.Writer, element interface{}) error {
 		} else {
 			b[0] = 0x00
 		}
+		_, err := w.Write(b)
+		if err != nil {
+			return err
+		}
 	case [16]byte:
-		w.Write(e[:])
+		_, err := w.Write(e[:])
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -73,11 +94,20 @@ func writeElements(w io.Writer, elements ...interface{}) error {
 	return nil
 }
 func writeNetaddress(w io.Writer, addr NetAddr) error {
-	writeElement(w, addr.Services)
+	err := writeElement(w, addr.Services)
+	if err != nil {
+		return err
+	}
 	var ip [16]byte
 	copy(ip[:], addr.Address.To16())
-	writeElement(w, ip)
-	binary.Write(w, binary.BigEndian, addr.Port)
+	err = writeElement(w, ip)
+	if err != nil {
+		return err
+	}
+	err = binary.Write(w, binary.BigEndian, addr.Port)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -111,16 +141,42 @@ func writeVarStr(w io.Writer, element string) error {
 	if err != nil {
 		return err
 	}
-	_, err =w.Write([]byte(element))
+	_, err = w.Write([]byte(element))
 	return err
 }
 
 func (ver *VersionMsg) Write(w io.Writer) error {
-	writeElements(w, ver.Version, ver .Services, ver.Timestamp)
-	writeNetaddress(w, ver.Addr_recv)
-	writeNetaddress(w, ver.Addr_from)
-	writeElement(w, ver.Nonce)
-	writeVarStr(w, ver.User_agent)
-	writeElements(w, ver.Start_height, ver.Relay)
-	return nil
+	var b bytes.Buffer
+	buf := bufio.NewWriter(&b)
+	err := writeElements(buf, ver.Version, ver .Services, ver.Timestamp)
+	if err != nil {
+		return err
+	}
+	err = writeNetaddress(buf, ver.Addr_recv)
+	if err != nil {
+		return err
+	}
+	err = writeNetaddress(buf, ver.Addr_from)
+	if err != nil {
+		return err
+	}
+	err = writeElement(buf, ver.Nonce)
+	if err != nil {
+		return err
+	}
+	err = writeVarStr(buf, ver.User_agent)
+	if err != nil {
+		return err
+	}
+	err = writeElements(buf, ver.Start_height, ver.Relay)
+	if err != nil {
+		return err
+	}
+	msg := make([]byte, b.Len())
+	_, err = b.Read(msg)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(msg)
+	return err
 }

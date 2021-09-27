@@ -9,6 +9,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/singurty/goldchain/wire"
+	"github.com/singurty/goldchain/peer"
 )
 
 func main() {
@@ -16,7 +17,10 @@ func main() {
 	fmt.Printf("got %v nodes\n", len(nodes))
 	for _, node := range nodes {
 		fmt.Printf("connecting to %v\n", node)
-		connectToNode(node)
+		go connectToNode(node)
+	}
+	for {
+
 	}
 }
 
@@ -41,6 +45,8 @@ func connectToNode(node net.IP) error {
 	if err != nil {
 		return err
 	}
+	peer := peer.Peer{Conn: conn}
+	go peer.Handler()
 	nonceBig, err := rand.Int(rand.Reader, big.NewInt(2^64))
 	if err != nil {
 		return err
@@ -52,11 +58,18 @@ func connectToNode(node net.IP) error {
 		Timestamp: time.Now().Unix(),
 		Addr_recv: wire.NetAddr{Services: 0x00, Address: node.To16(), Port: 8333,},
 		Nonce: nonce,
-		User_agent: "goldchain",
+		User_agent: "/Satoshi:0.21.1/",
 		Start_height: 0,
 		Relay: true,
 	}
 	fmt.Println("sending version message")
-	msg.Write(conn)
+	err = msg.Write(conn)
+	if err != nil {
+		panic(err)
+	}
 	return nil
+}
+
+func peerHandler() {
+
 }
