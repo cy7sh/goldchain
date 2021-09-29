@@ -2,46 +2,16 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"time"
 
-	"github.com/miekg/dns"
+	"github.com/singurty/goldchain/network"
 	"github.com/singurty/goldchain/peer"
 )
 
 func main() {
-	nodes := getNodes()
-	fmt.Printf("got %v nodes\n", len(nodes))
-	for _, node := range nodes {
-		go connectToNode(node)
-	}
+	network.Start()
 	for {
 		fmt.Printf("total valid peers: %v\n", len(peer.Peers))
 		time.Sleep(5 * time.Second)
 	}
-}
-
-func getNodes() []net.IP {
-	m := new(dns.Msg)
-	m.SetQuestion(dns.Fqdn("seed.bitcoin.sipa.be"), dns.TypeA)
-	in, err := dns.Exchange(m, "8.8.8.8:53")
-	if err != nil {
-		panic(err)
-	}
-	nodes := make([]net.IP, 0)
-	for _, ans := range in.Answer {
-		if t, ok := ans.(*dns.A); ok {
-			nodes = append(nodes, t.A)
-		}
-	}
-	return nodes
-}
-
-func connectToNode(node net.IP) {
-	conn, err := net.Dial("tcp", node.String()+":8333")
-	if err != nil {
-		return
-	}
-	peer := peer.Peer{Conn: conn}
-	peer.Start()
 }

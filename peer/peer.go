@@ -13,6 +13,7 @@ import (
 	"github.com/singurty/goldchain/wire"
 )
 
+// peers that we connected to
 var Peers []*Peer
 
 type Peer struct {
@@ -24,6 +25,7 @@ type Peer struct {
 	start_height int32
 	relay bool
 	nonce uint64 // for ping pong
+	hc chan string // to signal handler
 }
 
 func (p *Peer) Start()  {
@@ -31,10 +33,12 @@ func (p *Peer) Start()  {
 	err := p.sendVersion()
 	if err != nil {
 		fmt.Print(err)
+		p.hc <- "closed"
 	}
 }
 
 func (p *Peer) handler() {
+	p.hc = make(chan string)
 	listen := make(chan string)
 	go p.listener(listen)
 	for {
@@ -48,9 +52,16 @@ func (p *Peer) handler() {
 				err := p.sendVerack()
 				if err != nil {
 					fmt.Println(err)
+					p.hc <- "closed"
 				}
 			case "ping":
-
+				p.sendPong()
+			}
+		case handle := <-p.hc:
+			switch handle {
+			// connection closed
+			case "closed":
+				return
 			}
 		case <-time.After(10 * time.Minute):
 			p.sendPing()
@@ -74,8 +85,9 @@ func (p *Peer) listener(c chan string) {
 	for {
 		_, err := p.Conn.Read(buf)
 		if err != nil {
-			fmt.Println("connection closed with", p.Conn.RemoteAddr())
-			break
+//			fmt.Println("connection closed with", p.Conn.RemoteAddr())
+			p.hc <- "closed"
+			return
 		}
 		// check if this is a bitcoin message
 		magic := binary.LittleEndian.Uint32(buf[:4])
@@ -83,7 +95,7 @@ func (p *Peer) listener(c chan string) {
 			continue
 		}
 		command := string(bytes.TrimRight(buf[4:16], "\x00"))
-//		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
+		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
 		length := binary.LittleEndian.Uint32(buf[16:20])
 		if length == 0 {
 //			fmt.Println("empty payload")
@@ -139,7 +151,7 @@ func (p *Peer) sendVersion() error {
 	}
 	nonce := nonceBig.Uint64()
 	msg := wire.VersionMsg{
-		Version:    31800,
+		Version:    70015,
 		Services:   0x00,
 		Timestamp:  time.Now().Unix(),
 		Addr_recv:  wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
