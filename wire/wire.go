@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 )
@@ -137,18 +138,21 @@ func writeVarInt(w io.Writer, integer int) error {
 	return writeElement(w, uint64(integer))
 }
 
-func readVarInt(integer []byte) (int, int, error) {
+func ReadVarInt(integer []byte) (int, int, error) {
+	fmt.Printf("%x\n", integer[0:3])
 	if integer[0] < 0xfd {
 		return int(integer[0]), 1, nil
 	}
 	if integer[0] == 0xfd {
-		return int(binary.LittleEndian.Uint16(integer[:2])), 2, nil
+		fmt.Println("got 0xfd")
+		fmt.Printf("%x\n", integer[0:3])
+		return int(binary.LittleEndian.Uint16(integer[1:3])), 3, nil
 	}
 	if integer[0] == 0xfe {
-		return int(binary.LittleEndian.Uint32(integer[:4])), 4, nil
+		return int(binary.LittleEndian.Uint32(integer[1:5])), 5, nil
 	}
 	if integer[0] == 0xff {
-		return int(binary.LittleEndian.Uint64(integer[:8])), 8, nil
+		return int(binary.LittleEndian.Uint64(integer[1:9])), 9, nil
 	}
 	return 0, 0, errors.New("invalid var int")
 }
@@ -163,7 +167,7 @@ func writeVarStr(w io.Writer, element string) error {
 }
 
 func ReadVarStr(str []byte) (string, int, error) {
-	length, size, err := readVarInt(str)
+	length, size, err := ReadVarInt(str)
 	if err != nil {
 		return "", 0, err
 	}

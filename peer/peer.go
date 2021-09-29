@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/big"
 	"net"
 	"time"
@@ -89,7 +90,7 @@ func (p *Peer) handler() {
 }
 
 func (p *Peer) listener(c chan string) {
-	buf := make([]byte, 4096)
+	buf := make([]byte, 65536)
 	for {
 		_, err := p.Conn.Read(buf)
 		if err != nil {
@@ -121,25 +122,17 @@ func (p *Peer) listener(c chan string) {
 		switch command {
 		case "version":
 			c <- "version"
-//			fmt.Println("parsing version")
-			p.version = int32(binary.LittleEndian.Uint32(payload[:4]))
-			p.services = binary.LittleEndian.Uint64(payload[4:12])
-			user_agent, size, err := wire.ReadVarStr(payload[80:])
+			err := p.parseVersion(payload)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
-			p.user_agent = user_agent
-			p.start_height = int32(binary.LittleEndian.Uint32(payload[80+size:84+size]))
-			// there might not be a relay field
-			if uint(length) > 84 + uint(size) {
-				if payload[84+size] == 0x01 {
-					p.relay = true
-				} else {
-					p.relay = false
-				}
+		case "addr":
+			err := p.parseAddr(payload)
+			if err != nil {
+				fmt.Println(err)
+				continue
 			}
-//			fmt.Printf("%v, %x, %v, %v, %v\n", p.version, p.services, p.start_height, p.user_agent, p.relay)
 		case "ping":
 			p.nonce = binary.LittleEndian.Uint64(payload[:8])
 			c <- "ping"
@@ -152,8 +145,49 @@ func (p *Peer) listener(c chan string) {
 	}
 }
 
+func (p *Peer) parseVersion(payload []byte) error {
+	p.version = int32(binary.LittleEndian.Uint32(payload[:4]))
+	p.services = binary.LittleEndian.Uint64(payload[4:12])
+	user_agent, size, err := wire.ReadVarStr(payload[80:])
+	if err != nil {
+		return err
+	}
+	p.user_agent = user_agent
+	p.start_height = int32(binary.LittleEndian.Uint32(payload[80+size:84+size]))
+	// there might be a relay field
+	if uint(len(payload)) > 84 + uint(size) {
+		if payload[84+size] == 0x01 {
+			p.relay = true
+		} else {
+			p.relay = false
+		}
+	}
+//	fmt.Printf("%v, %x, %v, %v, %v\n", p.version, p.services, p.start_height, p.user_agent, p.relay)
+	return nil
+}
+
+func (p *Peer) parseAddr(payload []byte) error {
+	count, size, err := wire.ReadVarInt(payload)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("count is %v\n", count)
+	var i int
+	for {
+		if i >= count {
+			break
+		}
+		offset := size + (i * 30)
+		address := payload[offset + 12 : offset + 28]
+		port := binary.BigEndian.Uint16(payload[offset + 28 : offset + 30])
+		fmt.Println(address, port)
+		i++
+	}
+	return nil
+}
+
 func (p *Peer) sendVersion() error {
-	nonceBig, err := rand.Int(rand.Reader, big.NewInt(2^64))
+	nonceBig, err := rand.Int(rand.Reader, big.NewInt(int64(math.Pow(2, 62))))
 	if err != nil {
 		return err
 	}

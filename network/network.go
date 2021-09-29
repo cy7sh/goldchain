@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/miekg/dns"
@@ -16,6 +17,7 @@ var seeds []string
 
 type Node struct {
 	Address net.IP
+	Port int
 	Status int	// node status codes:
 				// 0 - not contacted yet
 				// 1 - connected, bash a Peer instance
@@ -51,7 +53,7 @@ func getNodes() {
 		for _, ans := range in.Answer {
 			if t, ok := ans.(*dns.A); ok {
 				if !doesExist(t.A) {
-					node := &Node{Address: t.A}
+					node := &Node{Address: t.A, Port: 8333}
 					Nodes = append(Nodes, node)
 				}
 			}
@@ -69,7 +71,7 @@ func doesExist(address net.IP) bool {
 }
 
 func (n *Node) connect() {
-	conn, err := net.Dial("tcp", n.Address.String()+":8333")
+	conn, err := net.Dial("tcp", n.Address.String() + ":" + strconv.Itoa(n.Port))
 	if err != nil {
 		return
 	}
