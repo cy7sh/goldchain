@@ -38,8 +38,8 @@ func (p *Peer) Start()  {
 }
 
 func (p *Peer) handler() {
-	p.hc = make(chan string)
-	listen := make(chan string)
+	p.hc = make(chan string, 1)
+	listen := make(chan string, 5)
 	go p.listener(listen)
 	for {
 		select {
@@ -95,7 +95,7 @@ func (p *Peer) listener(c chan string) {
 			continue
 		}
 		command := string(bytes.TrimRight(buf[4:16], "\x00"))
-		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
+//		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
 		length := binary.LittleEndian.Uint32(buf[16:20])
 		if length == 0 {
 //			fmt.Println("empty payload")
@@ -124,14 +124,14 @@ func (p *Peer) listener(c chan string) {
 			p.user_agent = user_agent
 			p.start_height = int32(binary.LittleEndian.Uint32(payload[80+size:84+size]))
 			// there might not be a relay field
-			if uint(length) >= 84 + uint(size) {
+			if uint(length) > 84 + uint(size) {
 				if payload[84+size] == 0x01 {
 					p.relay = true
 				} else {
 					p.relay = false
 				}
 			}
-			fmt.Printf("%v, %x, %v, %v, %v\n", p.version, p.services, p.start_height, p.user_agent, p.relay)
+//			fmt.Printf("%v, %x, %v, %v, %v\n", p.version, p.services, p.start_height, p.user_agent, p.relay)
 		case "ping":
 			p.nonce = binary.LittleEndian.Uint64(payload[:8])
 			c <- "ping"

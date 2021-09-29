@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	network.Start()
+	go network.Start()
 	for {
 		fmt.Printf("total valid peers: %v\n", len(peer.Peers))
 		time.Sleep(5 * time.Second)
