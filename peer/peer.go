@@ -53,6 +53,14 @@ func (p *Peer) handler() {
 				if err != nil {
 					fmt.Println(err)
 					p.hc <- "closed"
+					continue
+				}
+				// ask for more nodes
+				err = p.sendGetAddr()
+				if err != nil {
+					fmt.Println(err)
+					p.hc <- "closed"
+					continue
 				}
 			case "ping":
 				p.sendPong()
@@ -151,13 +159,14 @@ func (p *Peer) sendVersion() error {
 	}
 	nonce := nonceBig.Uint64()
 	msg := wire.VersionMsg{
-		Version:    70015,
+		Version:    70013,
 		Services:   0x00,
 		Timestamp:  time.Now().Unix(),
 		Addr_recv:  wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
 		Addr_from:  wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
 		Nonce:      nonce,
 		User_agent: byte(0x00),
+		Relay: true,
 	}
 	err = msg.Write(p.Conn)
 	if err != nil {
@@ -181,4 +190,8 @@ func (p *Peer) sendPing() error {
 
 func (p *Peer) sendPong() error {
 	return wire.WritePong(p.Conn, p.nonce)
+}
+
+func (p *Peer) sendGetAddr() error {
+	return wire.WriteGetaddr(p.Conn)
 }

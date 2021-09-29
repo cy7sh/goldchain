@@ -22,12 +22,21 @@ type Transaction struct {
 	Inputs []TxIn
 	OutCount VarInt
 	Outputs []TxOut
+	LockTime int32
 }
 
 type TxIn struct {
-
+	PrevTxHash [32]byte
+	PrevTxIndex int32
+	ScriptLen VarInt
+	Script []byte
+	Sequence [4]byte
 }
 
 type TxOut struct {
-
+	Value int64
+	ScriptLen VarInt
+	Script []byte
 }
+
+var Blockchain []Block

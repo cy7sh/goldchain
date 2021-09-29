@@ -18,6 +18,7 @@ type VersionMsg struct {
 	Nonce uint64
 	User_agent byte
 	Start_height int32
+	Relay bool
 }
 
 type NetAddr struct {
@@ -189,7 +190,7 @@ func writeMsg(w io.Writer, command string, payload []byte) error {
 	}
 	singleHash := sha256.Sum256(payload)
 	doubleHash := sha256.Sum256(singleHash[:])
-	err = binary.Write(&msgBuffer, binary.LittleEndian, doubleHash[:4])
+	_, err = msgBuffer.Write(doubleHash[:4])
 	if err != nil {
 		return err
 	}
@@ -241,7 +242,7 @@ func (ver *VersionMsg) Write(w io.Writer) error {
 }
 
 func WriteVerackMsg(w io.Writer) error {
-	return writeMsg(w, "veract", []byte{})
+	return writeMsg(w, "verack", []byte{})
 }
 
 func writePingPong(w io.Writer, nonce uint64, command string) error {
@@ -264,4 +265,8 @@ func WritePing(w io.Writer, nonce uint64) error {
 
 func WritePong(w io.Writer, nonce uint64) error {
 	return writePingPong(w, nonce, "pong")
+}
+
+func WriteGetaddr(w io.Writer) error {
+	return writeMsg(w, "getaddr", []byte{})
 }
