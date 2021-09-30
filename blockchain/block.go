@@ -2,18 +2,18 @@ package blockchain
 
 type Block struct {
 	Height int
-	PrevHash [32]byte
-	MerkleRoot [32]byte
+	PrevHash []byte
+	MerkleRoot []byte
 	Time int32
 	Bits int32
 	Nonce int32
-	Transactions []Transaction
+	Transactions []*Transaction
 }
 
 type Transaction struct {
 	Flag [2]byte
-	Inputs []TxIn
-	Outputs []TxOut
+	Inputs []*TxIn
+	Outputs []*TxOut
 	LockTime int32
 }
 
@@ -26,6 +26,5 @@ type TxIn struct {
 
 type TxOut struct {
 	Value int64
-	ScriptLen int
 	Script []byte
 }

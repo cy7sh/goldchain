@@ -10,7 +10,7 @@ import (
 
 func main() {
 	blockchain.Start() // blockchain should be ready before we start the network
-	go network.Start()
+//	go network.Start()
 	for {
 		fmt.Printf("total peers: %v\n", len(network.Peers))
 		fmt.Printf("total nodes: %v\n", len(network.Nodes))
