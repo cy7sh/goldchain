@@ -42,7 +42,7 @@ func Start() {
 		panic(err)
 	}
 	// create blockchain table if does not exist
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER)")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -95,14 +95,16 @@ func bootstrapBlockChain() {
 	genesis.Transactions[0].Outputs = make([]*TxOut, 0)
 	genesis.Transactions[0].Outputs = append(genesis.Transactions[0].Outputs, &TxOut{Value: 5000000000})
 	genesis.Transactions[0].Outputs[0].Script = script
+	genesis.Hash = genesis.GetHash()
 	addBlockToDb(genesis)
 }
 
 func addBlockToDb(block *Block) {
-	statement := "INSERT INTO blockchain (height, prev_hash, merkle_root, time, bits, nonce) VALUES (0, $1, $2, $3, $4, $5)"
+	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce) VALUES (0, $1, $2, $3, $4, $5, $6)"
+	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
-	_, err := db.Exec(statement, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce)
+	_, err := db.Exec(statement, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce)
 	if err != nil {
 		panic(err)
 	}
@@ -116,12 +118,14 @@ func addBlockToDb(block *Block) {
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {
 	block := &Block{}
+	var hashHex string
 	var prevHashHex string
 	var merkleRootHex string
-	err := row.Scan(&block.Height, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce)
+	err := row.Scan(&block.Height, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce)
 	if err != nil {
 		return nil, err
 	}
+	hash, err := hex.DecodeString(hashHex)
 	prevHash, err := hex.DecodeString(prevHashHex)
 	if err != nil {
 		return nil, err
@@ -130,6 +134,7 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	if err != nil {
 		return nil, err
 	}
+	copy(block.Hash[:], hash)
 	copy(block.PrevHash[:], prevHash)
 	copy(block.MerkleRoot[:], merkleRoot)
 	txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(block.Height))

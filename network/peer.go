@@ -206,7 +206,7 @@ func (p *Peer) sendVersion() error {
 		Addr_from:  wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
 		Nonce:      nonce,
 		User_agent: byte(0x00),
-		Relay: true,
+		Relay: false,
 	}
 	err = msg.Write(p.Conn)
 	if err != nil {
