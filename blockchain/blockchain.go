@@ -1,9 +1,10 @@
 package blockchain
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/gob"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -33,7 +34,7 @@ func Start() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = os.OpenFile(rootPath + "blockchain.db", os.O_CREATE|os.O_APPEND, 0665)
+	_, err = os.OpenFile(rootPath + "blockchain.db", os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +54,7 @@ func Start() {
 		if errors.Is(err, sql.ErrNoRows) {
 			bootstrapBlockChain()
 		} else {
-			fmt.Println(err)
+			panic(err)
 		}
 	}
 	spew.Dump(LastBlock)
@@ -78,6 +79,7 @@ func bootstrapBlockChain() {
 		panic(err)
 	}
 	genesis := &Block{
+		Height: 0,
 		PrevHash: []byte{},
 		MerkleRoot: merkleRoot,
 		Time: 1231006505,
@@ -98,16 +100,28 @@ func bootstrapBlockChain() {
 	if err != nil {
 		panic(err)
 	}
+	txFile, err := os.Create(rootPath + "transactions/" + strconv.Itoa(genesis.Height))
+	if err != nil {
+		panic(err)
+	}
+	encode := gob.NewEncoder(txFile)
+	encode.Encode(genesis.Transactions)
 }
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {
-	var txIndex int
 	block := &Block{}
 	err := row.Scan(&block.Height, &block.PrevHash, &block.MerkleRoot, &block.Time, &block.Bits, &block.Nonce)
 	if err != nil {
 		return nil, err
 	}
-	txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(txIndex) + ".json")
-	err = json.Unmarshal(txFile, &block.Transactions)
+	txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(block.Height))
+	if err != nil {
+		return nil, err
+	}
+	decode := gob.NewDecoder(bytes.NewReader(txFile))
+	err = decode.Decode(&block.Transactions)
+	if err != nil {
+		panic(err)
+	}
 	return block, nil
 }
