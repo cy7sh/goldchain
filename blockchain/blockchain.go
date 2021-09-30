@@ -10,7 +10,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/davecgh/go-spew/spew"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -43,26 +42,28 @@ func Start() {
 		panic(err)
 	}
 	// create blockchain table if does not exist
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, prev_hash BLOB, merkle_root BLOB, time INTEGER, bits INTEGER, nonce INTEGER)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER)")
 	if err != nil {
 		fmt.Println(err)
 	}
 	// get the block the biggest height
+lastBlock:
 	lastBlockRow := db.QueryRow("SELECT * FROM blockchain ORDER BY height DESC LIMIT 1;")
 	LastBlock, err = getBlockFromRow(lastBlockRow)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			bootstrapBlockChain()
+			goto lastBlock
 		} else {
 			panic(err)
 		}
 	}
-	spew.Dump(LastBlock)
+	fmt.Printf("hash is %x\n", LastBlock.GetHash())
 }
 
 func bootstrapBlockChain() {
 	fmt.Println("bootstrapping blockchain...")
-	merkleRoot, err := hex.DecodeString("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b")
+	merkleRoot, err := hex.DecodeString("3BA3EDFD7A7B12B27AC72C3E67768F617FC81BC3888A51323A9FB8AA4B1E5E4A")
 	if err != nil {
 		panic(err)
 	}
@@ -80,12 +81,11 @@ func bootstrapBlockChain() {
 	}
 	genesis := &Block{
 		Height: 0,
-		PrevHash: []byte{},
-		MerkleRoot: merkleRoot,
 		Time: 1231006505,
 		Bits: 0x1d00ffff,
 		Nonce: 2083236893,
 	}
+	copy(genesis.MerkleRoot[:], merkleRoot)
 	genesis.Transactions = make([]*Transaction, 0)
 	genesis.Transactions = append(genesis.Transactions, &Transaction{LockTime: 0})
 	genesis.Transactions[0].Inputs = make([]*TxIn, 0)
@@ -95,25 +95,43 @@ func bootstrapBlockChain() {
 	genesis.Transactions[0].Outputs = make([]*TxOut, 0)
 	genesis.Transactions[0].Outputs = append(genesis.Transactions[0].Outputs, &TxOut{Value: 5000000000})
 	genesis.Transactions[0].Outputs[0].Script = script
+	addBlockToDb(genesis)
+}
+
+func addBlockToDb(block *Block) {
 	statement := "INSERT INTO blockchain (height, prev_hash, merkle_root, time, bits, nonce) VALUES (0, $1, $2, $3, $4, $5)"
-	_, err = db.Exec(statement, genesis.PrevHash, genesis.MerkleRoot, genesis.Time, genesis.Bits, genesis.Nonce)
+	prevHashHex := hex.EncodeToString(block.PrevHash[:])
+	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
+	_, err := db.Exec(statement, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce)
 	if err != nil {
 		panic(err)
 	}
-	txFile, err := os.Create(rootPath + "transactions/" + strconv.Itoa(genesis.Height))
+	txFile, err := os.Create(rootPath + "transactions/" + strconv.Itoa(block.Height))
 	if err != nil {
 		panic(err)
 	}
 	encode := gob.NewEncoder(txFile)
-	encode.Encode(genesis.Transactions)
+	encode.Encode(block.Transactions)
 }
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {
 	block := &Block{}
-	err := row.Scan(&block.Height, &block.PrevHash, &block.MerkleRoot, &block.Time, &block.Bits, &block.Nonce)
+	var prevHashHex string
+	var merkleRootHex string
+	err := row.Scan(&block.Height, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce)
 	if err != nil {
 		return nil, err
 	}
+	prevHash, err := hex.DecodeString(prevHashHex)
+	if err != nil {
+		return nil, err
+	}
+	merkleRoot, err := hex.DecodeString(merkleRootHex)
+	if err != nil {
+		return nil, err
+	}
+	copy(block.PrevHash[:], prevHash)
+	copy(block.MerkleRoot[:], merkleRoot)
 	txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(block.Height))
 	if err != nil {
 		return nil, err
