@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 )
@@ -139,13 +138,10 @@ func writeVarInt(w io.Writer, integer int) error {
 }
 
 func ReadVarInt(integer []byte) (int, int, error) {
-//	fmt.Printf("%x\n", integer[0:3])
 	if integer[0] < 0xfd {
 		return int(integer[0]), 1, nil
 	}
 	if integer[0] == 0xfd {
-		fmt.Println("got 0xfd")
-		fmt.Printf("%x\n", integer[0:3])
 		return int(binary.LittleEndian.Uint16(integer[1:3])), 3, nil
 	}
 	if integer[0] == 0xfe {
