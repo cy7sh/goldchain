@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
@@ -90,33 +91,40 @@ func (p *Peer) handler() {
 }
 
 func (p *Peer) listener(c chan string) {
-	buf := make([]byte, 65536)
+	msg := make([]byte, 65536)
+	buf := make([]byte, 4096)
+	next := 0
 	for {
-		_, err := p.Conn.Read(buf)
+		n, err := bufio.NewReader(p.Conn).Read(buf)
 		if err != nil {
-//			fmt.Println("connection closed with", p.Conn.RemoteAddr())
 			p.hc <- "closed"
 			return
 		}
+		copy(msg[next: next + n], buf[:n])
+		next += n
 		// check if this is a bitcoin message
-		magic := binary.LittleEndian.Uint32(buf[:4])
+		magic := binary.LittleEndian.Uint32(msg[:4])
 		if !(magic == 0xD9B4BEF9 || magic == 0xDAB5BFFA || magic == 0x0709110B || magic == 0x40CF030A || magic == 0xFEB4BEF9) {
+			next = 0
 			continue
 		}
-		command := string(bytes.TrimRight(buf[4:16], "\x00"))
-//		fmt.Printf("got %v from %v\n", command, p.Conn.RemoteAddr())
-		length := binary.LittleEndian.Uint32(buf[16:20])
+		command := string(bytes.TrimRight(msg[4:16], "\x00"))
+		length := int(binary.LittleEndian.Uint32(msg[16:20]))
 		if length == 0 {
-//			fmt.Println("empty payload")
+			next = 0
 			continue
 		}
-		checksum := buf[20:24]
-		var payload []byte
-		payload = buf[24:24+length]
+		if length > next {
+			continue
+		}
+		next = 0
+		checksum := make([]byte, 4)
+		copy(checksum, msg[20:24])
+		payload := make([]byte, length)
+		copy(payload, msg[24:24+length])
 		singleHash := sha256.Sum256(payload)
 		doubleHash := sha256.Sum256(singleHash[:])
 		if !bytes.Equal(checksum, doubleHash[:4]){
-//			fmt.Println("corrupt payload")
 			continue
 		}
 		switch command {
@@ -128,6 +136,7 @@ func (p *Peer) listener(c chan string) {
 				continue
 			}
 		case "addr":
+			fmt.Printf("got %v bytes addr\n", length)
 			err := p.parseAddr(payload)
 			if err != nil {
 				fmt.Println(err)
@@ -162,7 +171,6 @@ func (p *Peer) parseVersion(payload []byte) error {
 			p.relay = false
 		}
 	}
-//	fmt.Printf("%v, %x, %v, %v, %v\n", p.version, p.services, p.start_height, p.user_agent, p.relay)
 	return nil
 }
 
@@ -178,9 +186,13 @@ func (p *Peer) parseAddr(payload []byte) error {
 			break
 		}
 		offset := size + (i * 30)
+		if offset + 30 >= len(payload) {
+			break
+		}
+		fmt.Printf("offset: %v, size: %v, count: %v\n", offset, size, count)
 		address := payload[offset + 12 : offset + 28]
 		port := binary.BigEndian.Uint16(payload[offset + 28 : offset + 30])
-		fmt.Println(address, port)
+		fmt.Printf("%v:%v\n", address, port)
 		i++
 	}
 	return nil

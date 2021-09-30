@@ -18,9 +18,13 @@ var LastBlock *Block
 var rootPath string // where the block chain sould be stored
 
 func Start() {
-	rootPath = "~/.goldchain/"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+	rootPath = home + "/.goldchain/"
 	// create root path and transactions directory if does not exists
-	err := os.MkdirAll(rootPath, 0775)
+	err = os.MkdirAll(rootPath, 0775)
 	if err != nil {
 		panic(err)
 	}

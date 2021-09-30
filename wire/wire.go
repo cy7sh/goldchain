@@ -139,7 +139,7 @@ func writeVarInt(w io.Writer, integer int) error {
 }
 
 func ReadVarInt(integer []byte) (int, int, error) {
-	fmt.Printf("%x\n", integer[0:3])
+//	fmt.Printf("%x\n", integer[0:3])
 	if integer[0] < 0xfd {
 		return int(integer[0]), 1, nil
 	}
