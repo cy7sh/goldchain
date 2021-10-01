@@ -48,19 +48,7 @@ func (p *Peer) handler() {
 				// perhaps alive
 				p.Alive = true
 				Peers = append(Peers, p)
-				err := p.sendVerack()
-				if err != nil {
-					fmt.Println(err)
-					p.hc <- "closed"
-					continue
-				}
-				// ask for more nodes
-				err = p.sendGetAddr()
-				if err != nil {
-					fmt.Println(err)
-					p.hc <- "closed"
-					continue
-				}
+				p.sendVerack()
 			case "ping":
 				p.sendPong()
 			}
@@ -228,10 +216,16 @@ func (p *Peer) sendPing() error {
 	return wire.WritePing(p.Conn, p.nonce)
 }
 
-func (p *Peer) sendPong() error {
-	return wire.WritePong(p.Conn, p.nonce)
+func (p *Peer) sendPong() {
+	err := wire.WritePong(p.Conn, p.nonce)
+	if err != nil {
+		p.hc <- "closed"
+	}
 }
 
-func (p *Peer) sendGetAddr() error {
-	return wire.WriteGetaddr(p.Conn)
+func (p *Peer) sendGetAddr() {
+	err := wire.WriteGetaddr(p.Conn)
+	if err != nil {
+		p.hc <- "closed"
+	}
 }

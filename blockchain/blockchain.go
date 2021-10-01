@@ -16,7 +16,7 @@ import (
 var Blockchain []Block
 var db *sql.DB
 var LastBlock *Block
-var rootPath string // where the block chain sould be stored
+var rootPath string // where the blockchain sould be stored
 
 func Start() {
 	home, err := os.UserHomeDir()
@@ -42,11 +42,11 @@ func Start() {
 		panic(err)
 	}
 	// create blockchain table if does not exist
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
 	if err != nil {
 		fmt.Println(err)
 	}
-	// get the block the biggest height
+	// get the block with biggest height
 lastBlock:
 	lastBlockRow := db.QueryRow("SELECT * FROM blockchain ORDER BY height DESC LIMIT 1;")
 	LastBlock, err = getBlockFromRow(lastBlockRow)

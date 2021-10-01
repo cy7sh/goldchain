@@ -27,10 +27,15 @@ type Node struct {
 	Peer *Peer
 }
 
+var maxPeers = 100
+
 func Start() {
 	seeds = []string{"seed.bitcoin.sipa.be", "dnsseed.bluematt.me", "dnsseed.bitcoin.dashjr.org", "seed.bitcoinstats.com", "seed.bitcoin.jonasschnelli.ch", "seed.btc.petertodd.org", "seed.bitcoin.sprovoost.nl", "dnsseed.emzy.de", "seed.bitcoin.wiz.biz"}
 	getNodes()
 	for {
+		if len(Peers) >= maxPeers {
+			break
+		}
 		for _, node := range Nodes {
 			if node.Status == 0 {
 				node.Status = 2
@@ -84,6 +89,10 @@ func NewNode(address []byte, port int) {
 		}
 	}
 	Nodes = append(Nodes, &Node{Address: address, Port: port})
+}
+
+func fillBlockchain() {
+	
 }
 
 func (n *Node) connect() {
