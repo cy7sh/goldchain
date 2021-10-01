@@ -270,3 +270,29 @@ func WritePong(w io.Writer, nonce uint64) error {
 func WriteGetaddr(w io.Writer) error {
 	return writeMsg(w, "getaddr", []byte{})
 }
+
+func WriteGetHeaders(w io.Writer, protocolVersion int, start [32]byte, end [32]byte) error {
+	var payloadBuffer bytes.Buffer
+	err := writeElement(&payloadBuffer, int32(protocolVersion))
+	if err != nil {
+		return err
+	}
+	err = writeVarInt(&payloadBuffer, 1)
+	if err != nil {
+		return err
+	}
+	_, err = payloadBuffer.Write(start[:])
+	if err != nil {
+		return err
+	}
+	_, err = payloadBuffer.Write(end[:])
+	if err != nil {
+		return err
+	}
+	payload := make([]byte, payloadBuffer.Len())
+	_, err = payloadBuffer.Read(payload)
+	if err != nil {
+		return err
+	}
+	return writeMsg(w, "getheaders", payload)
+}

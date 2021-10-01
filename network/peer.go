@@ -76,41 +76,51 @@ func (p *Peer) handler() {
 }
 
 func (p *Peer) listener(c chan string) {
-	msg := make([]byte, 65536)
-	buf := make([]byte, 4096)
-	next := 0
+	buf := make([]byte, 65536)
+	bufReader := bufio.NewReader(p.Conn)
 	for {
-		n, err := bufio.NewReader(p.Conn).Read(buf)
+		n, err := bufReader.Read(buf)
 		if err != nil {
 			p.hc <- "closed"
 			return
 		}
-		copy(msg[next: next + n], buf[:n])
-		next += n
 		// check if this is a bitcoin message
-		magic := binary.LittleEndian.Uint32(msg[:4])
+		magic := binary.LittleEndian.Uint32(buf[:4])
 		if !(magic == 0xD9B4BEF9 || magic == 0xDAB5BFFA || magic == 0x0709110B || magic == 0x40CF030A || magic == 0xFEB4BEF9) {
-			next = 0
 			continue
 		}
-		command := string(bytes.TrimRight(msg[4:16], "\x00"))
-		length := int(binary.LittleEndian.Uint32(msg[16:20]))
-		if length == 0 {
-			next = 0
-			continue
-		}
-		if length > next {
-			continue
-		}
-		next = 0
-		checksum := make([]byte, 4)
-		copy(checksum, msg[20:24])
+		command := string(bytes.TrimRight(buf[4:16], "\x00"))
+		length := int(binary.LittleEndian.Uint32(buf[16:20]))
 		payload := make([]byte, length)
-		copy(payload, msg[24:24+length])
-		singleHash := sha256.Sum256(payload)
-		doubleHash := sha256.Sum256(singleHash[:])
-		if !bytes.Equal(checksum, doubleHash[:4]){
-			continue
+		checksum := make([]byte, 4)
+		copy(checksum, buf[20:24])
+		if length > 0 {
+			if length + 24 > n {
+				copy(payload, buf[24:n])
+				payloadBufIndex := n - 24
+				toRead := length - (n - 24)
+				for {
+					if toRead == 0 {
+						break
+					}
+					n, err := bufReader.Read(payload[payloadBufIndex:])
+					if err != nil {
+						p.hc <- "closed"
+						return
+					}
+					payloadBufIndex += n
+					toRead -= n
+				}
+			} else {
+				copy(payload, buf[24:24+length])
+			}
+			singleHash := sha256.Sum256(payload)
+			doubleHash := sha256.Sum256(singleHash[:])
+			if !bytes.Equal(checksum, doubleHash[:4]){
+				if command == "headers" {
+				}
+				continue
+			}
 		}
 		switch command {
 		case "version":
@@ -134,6 +144,8 @@ func (p *Peer) listener(c chan string) {
 			if p.nonce == nonce {
 				c <- "pong"
 			}
+		case "headers":
+			fmt.Println("yay! got headers")
 		}
 	}
 }
@@ -187,7 +199,7 @@ func (p *Peer) sendVersion() error {
 	}
 	nonce := nonceBig.Uint64()
 	msg := wire.VersionMsg{
-		Version:    70013,
+		Version:    int32(ProtocolVersion),
 		Services:   0x00,
 		Timestamp:  time.Now().Unix(),
 		Addr_recv:  wire.NetAddr{Services: 0x00, Address: net.ParseIP("::ffff:127.0.0.1"), Port: 0},
@@ -225,6 +237,13 @@ func (p *Peer) sendPong() {
 
 func (p *Peer) sendGetAddr() {
 	err := wire.WriteGetaddr(p.Conn)
+	if err != nil {
+		p.hc <- "closed"
+	}
+}
+
+func (p *Peer) SendGetHeaders(start [32]byte, end [32]byte) {
+	err := wire.WriteGetHeaders(p.Conn, ProtocolVersion, start, end)
 	if err != nil {
 		p.hc <- "closed"
 	}

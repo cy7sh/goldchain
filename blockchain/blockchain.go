@@ -58,7 +58,6 @@ lastBlock:
 			panic(err)
 		}
 	}
-	fmt.Printf("hash is %x\n", LastBlock.GetHash())
 }
 
 func bootstrapBlockChain() {
@@ -100,13 +99,21 @@ func bootstrapBlockChain() {
 }
 
 func addBlockToDb(block *Block) {
-	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce) VALUES (0, $1, $2, $3, $4, $5, $6)"
+	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES (0, $1, $2, $3, $4, $5, $6, $7)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
-	_, err := db.Exec(statement, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce)
+	var tx int
+	if block.Transactions != nil {
+		tx = 1
+	}
+	_, err := db.Exec(statement, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
+	}
+	// if this is only a header
+	if tx == 0{
+		return
 	}
 	txFile, err := os.Create(rootPath + "transactions/" + strconv.Itoa(block.Height))
 	if err != nil {
@@ -121,7 +128,8 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	var hashHex string
 	var prevHashHex string
 	var merkleRootHex string
-	err := row.Scan(&block.Height, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce)
+	var tx int
+	err := row.Scan(&block.Height, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
 	if err != nil {
 		return nil, err
 	}
@@ -137,14 +145,16 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	copy(block.Hash[:], hash)
 	copy(block.PrevHash[:], prevHash)
 	copy(block.MerkleRoot[:], merkleRoot)
-	txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(block.Height))
-	if err != nil {
-		return nil, err
-	}
-	decode := gob.NewDecoder(bytes.NewReader(txFile))
-	err = decode.Decode(&block.Transactions)
-	if err != nil {
-		panic(err)
+	if tx == 1 {
+		txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(block.Height))
+		if err != nil {
+			return nil, err
+		}
+		decode := gob.NewDecoder(bytes.NewReader(txFile))
+		err = decode.Decode(&block.Transactions)
+		if err != nil {
+			panic(err)
+		}
 	}
 	return block, nil
 }

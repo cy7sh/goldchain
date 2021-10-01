@@ -1,13 +1,14 @@
 package network
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"strconv"
 	"time"
-	"bytes"
 
 	"github.com/miekg/dns"
+	"github.com/singurty/goldchain/blockchain"
 )
 
 //dns seeds to bootstrap
@@ -16,6 +17,8 @@ var seeds []string
 var Nodes []*Node
 // peers that we connected to
 var Peers []*Peer
+
+var ProtocolVersion = 70013
 
 type Node struct {
 	Address net.IP
@@ -27,7 +30,7 @@ type Node struct {
 	Peer *Peer
 }
 
-var maxPeers = 100
+var maxPeers = 50
 
 func Start() {
 	seeds = []string{"seed.bitcoin.sipa.be", "dnsseed.bluematt.me", "dnsseed.bitcoin.dashjr.org", "seed.bitcoinstats.com", "seed.bitcoin.jonasschnelli.ch", "seed.btc.petertodd.org", "seed.bitcoin.sprovoost.nl", "dnsseed.emzy.de", "seed.bitcoin.wiz.biz"}
@@ -43,6 +46,7 @@ func Start() {
 			}
 		}
 	}
+	go fillBlockchain()
 }
 
 func getNodes() {
@@ -92,7 +96,8 @@ func NewNode(address []byte, port int) {
 }
 
 func fillBlockchain() {
-	
+	fmt.Println("sending getheaders")
+	Peers[0].SendGetHeaders(blockchain.LastBlock.Hash, [32]byte{})
 }
 
 func (n *Node) connect() {
