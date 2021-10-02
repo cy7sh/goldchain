@@ -7,7 +7,6 @@ import (
 )
 
 type Block struct {
-	Height int
 	Hash [32]byte
 	PrevHash [32]byte
 	MerkleRoot [32]byte

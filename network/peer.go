@@ -146,7 +146,6 @@ func (p *Peer) listener(c chan string) {
 				c <- "pong"
 			}
 		case "headers":
-			fmt.Printf("checksum: %x\n", checksum)
 			err := p.parseHeaders(payload)
 			if err != nil {
 				fmt.Println(err)
@@ -195,8 +194,7 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		copy(block.PrevHash[:], prevBlock)
 		copy(block.MerkleRoot[:], merkleRoot)
 		blockchain.RefreshLastBlock()
-		block.Height = blockchain.LastBlock.Height + 1
-		blockchain.NewBlock(block)
+		go blockchain.NewBlock(block)
 		size += 81
 	}
 	return nil

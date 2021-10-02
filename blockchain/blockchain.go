@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -37,12 +36,13 @@ func Start() {
 	if err != nil {
 		panic(err)
 	}
-	db, err = sql.Open("sqlite3", rootPath + "blockchain.db")
+	db, err = sql.Open("sqlite3", "file:" + rootPath + "blockchain.db" + "?cache=shared&mode=rwc&_journal_mode=WAL")
 	if err != nil {
 		panic(err)
 	}
+	db.SetMaxOpenConns(1)
 	// create blockchain table if does not exist
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -51,7 +51,7 @@ func Start() {
 
 func RefreshLastBlock() {
 	// get the block with biggest height
-	lastBlockRow := db.QueryRow("SELECT * FROM blockchain ORDER BY height DESC LIMIT 1;")
+	lastBlockRow := db.QueryRow("SELECT hash, prev_hash, merkle_root, time, bits, nonce, tx FROM blockchain ORDER BY height DESC LIMIT 1;")
 	var err error
 	LastBlock, err = getBlockFromRow(lastBlockRow)
 	if err != nil {
@@ -84,7 +84,6 @@ func bootstrapBlockChain() {
 		panic(err)
 	}
 	genesis := &Block{
-		Height: 0,
 		Time: 1231006505,
 		Bits: 0x1d00ffff,
 		Nonce: 2083236893,
@@ -104,7 +103,7 @@ func bootstrapBlockChain() {
 
 func NewBlock(block *Block) {
 	block.Hash = block.GetHash()
-	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+	statement := "INSERT INTO blockchain (hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
@@ -112,7 +111,7 @@ func NewBlock(block *Block) {
 	if block.Transactions != nil {
 		tx = 1
 	}
-	_, err := db.Exec(statement, block.Height, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
+	_, err := db.Exec(statement, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
 	}
@@ -120,7 +119,7 @@ func NewBlock(block *Block) {
 	if tx == 0{
 		return
 	}
-	txFile, err := os.Create(rootPath + "transactions/" + strconv.Itoa(block.Height))
+	txFile, err := os.Create(rootPath + "transactions/" + hashHex)
 	if err != nil {
 		panic(err)
 	}
@@ -134,7 +133,7 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	var prevHashHex string
 	var merkleRootHex string
 	var tx int
-	err := row.Scan(&block.Height, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
+	err := row.Scan(&hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +150,7 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	copy(block.PrevHash[:], prevHash)
 	copy(block.MerkleRoot[:], merkleRoot)
 	if tx == 1 {
-		txFile, err := os.ReadFile(rootPath + "transactions/" + strconv.Itoa(block.Height))
+		txFile, err := os.ReadFile(rootPath + "transactions/" + hashHex)
 		if err != nil {
 			return nil, err
 		}
