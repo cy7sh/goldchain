@@ -1,17 +1,18 @@
 package network
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"math/big"
-	"bufio"
-	"fmt"
 	"net"
 	"time"
-	"bytes"
 
+	"github.com/singurty/goldchain/blockchain"
 	"github.com/singurty/goldchain/wire"
 )
 
@@ -146,6 +147,11 @@ func (p *Peer) listener(c chan string) {
 			}
 		case "headers":
 			fmt.Println("yay! got headers")
+			err := p.parseHeaders(payload)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
 		}
 	}
 }
@@ -170,16 +176,38 @@ func (p *Peer) parseVersion(payload []byte) error {
 	return nil
 }
 
+func (p *Peer) parseHeaders(payload []byte) error {
+	count, size, err := wire.ReadVarInt(payload)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < count; i++ {
+		size += i * 81
+		prevBlock := payload[size + 4:size + 36]
+		merkleRoot := payload[size + 36:size + 68]
+		timestamp := int(binary.LittleEndian.Uint32(payload[size + 68:size + 72]))
+		bits := int(binary.LittleEndian.Uint32(payload[size + 72:size + 76]))
+		nonce := int(binary.LittleEndian.Uint32(payload[size + 76:size + 80]))
+		block := &blockchain.Block{
+			Time: timestamp,
+			Bits: bits,
+			Nonce: nonce,
+		}
+		copy(block.PrevHash[:], prevBlock)
+		copy(block.MerkleRoot[:], merkleRoot)
+		blockchain.RefreshLastBlock()
+		block.Height = blockchain.LastBlock.Height + 1
+		blockchain.NewBlock(block)
+	}
+	return nil
+}
+
 func (p *Peer) parseAddr(payload []byte) error {
 	count, size, err := wire.ReadVarInt(payload)
 	if err != nil {
 		return err
 	}
-	var i int
-	for {
-		if i >= count {
-			break
-		}
+	for i := 0; i < count; i++{
 		offset := size + (i * 30)
 		if offset + 30 >= len(payload) {
 			break
@@ -187,7 +215,6 @@ func (p *Peer) parseAddr(payload []byte) error {
 		address := payload[offset + 12 : offset + 28]
 		port := int(binary.BigEndian.Uint16(payload[offset + 28 : offset + 30]))
 		Nodes = append(Nodes, &Node{Address: address, Port: port})
-		i++
 	}
 	return nil
 }

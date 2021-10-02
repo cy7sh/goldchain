@@ -137,6 +137,7 @@ func writeVarInt(w io.Writer, integer int) error {
 	return writeElement(w, uint64(integer))
 }
 
+								// int, size, error
 func ReadVarInt(integer []byte) (int, int, error) {
 	if integer[0] < 0xfd {
 		return int(integer[0]), 1, nil

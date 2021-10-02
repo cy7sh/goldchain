@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 )
 
 type Block struct {
@@ -12,9 +11,9 @@ type Block struct {
 	Hash [32]byte
 	PrevHash [32]byte
 	MerkleRoot [32]byte
-	Time int32
-	Bits int32
-	Nonce int32
+	Time int
+	Bits int
+	Nonce int
 	Transactions []*Transaction
 }
 
@@ -22,18 +21,18 @@ type Transaction struct {
 	Flag [2]byte
 	Inputs []*TxIn
 	Outputs []*TxOut
-	LockTime int32
+	LockTime int
 }
 
 type TxIn struct {
 	PrevTxHash [32]byte
-	PrevTxIndex int32
+	PrevTxIndex int
 	Script []byte
 	Sequence [4]byte
 }
 
 type TxOut struct {
-	Value int64
+	Value int
 	Script []byte
 }
 
@@ -47,7 +46,6 @@ func (b *Block) GetHash() [32]byte {
 	binary.Write(&headerBuff, binary.LittleEndian, uint32(b.Nonce))
 	header := make([]byte, headerBuff.Len())
 	headerBuff.Read(header)
-	fmt.Printf("header: %x\n", header)
 	single := sha256.Sum256(header[:])
 	double := sha256.Sum256(single[:])
 	return double

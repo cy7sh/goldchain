@@ -46,18 +46,23 @@ func Start() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	RefreshLastBlock()
+}
+
+func RefreshLastBlock() {
 	// get the block with biggest height
-lastBlock:
 	lastBlockRow := db.QueryRow("SELECT * FROM blockchain ORDER BY height DESC LIMIT 1;")
+	var err error
 	LastBlock, err = getBlockFromRow(lastBlockRow)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			bootstrapBlockChain()
-			goto lastBlock
+			RefreshLastBlock()
 		} else {
 			panic(err)
 		}
 	}
+
 }
 
 func bootstrapBlockChain() {
@@ -94,12 +99,13 @@ func bootstrapBlockChain() {
 	genesis.Transactions[0].Outputs = make([]*TxOut, 0)
 	genesis.Transactions[0].Outputs = append(genesis.Transactions[0].Outputs, &TxOut{Value: 5000000000})
 	genesis.Transactions[0].Outputs[0].Script = script
-	genesis.Hash = genesis.GetHash()
-	addBlockToDb(genesis)
+	NewBlock(genesis)
 }
 
-func addBlockToDb(block *Block) {
-	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES (0, $1, $2, $3, $4, $5, $6, $7)"
+func NewBlock(block *Block) {
+	block.Hash = block.GetHash()
+	fmt.Println("adding block")
+	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
@@ -107,7 +113,8 @@ func addBlockToDb(block *Block) {
 	if block.Transactions != nil {
 		tx = 1
 	}
-	_, err := db.Exec(statement, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
+	fmt.Printf("block height is %v\n", block.Height)
+	_, err := db.Exec(statement, block.Height, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
 	}
