@@ -146,7 +146,7 @@ func (p *Peer) listener(c chan string) {
 				c <- "pong"
 			}
 		case "headers":
-			fmt.Println("yay! got headers")
+			fmt.Printf("checksum: %x\n", checksum)
 			err := p.parseHeaders(payload)
 			if err != nil {
 				fmt.Println(err)
@@ -182,7 +182,6 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		return err
 	}
 	for i := 0; i < count; i++ {
-		size += i * 81
 		prevBlock := payload[size + 4:size + 36]
 		merkleRoot := payload[size + 36:size + 68]
 		timestamp := int(binary.LittleEndian.Uint32(payload[size + 68:size + 72]))
@@ -198,6 +197,7 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		blockchain.RefreshLastBlock()
 		block.Height = blockchain.LastBlock.Height + 1
 		blockchain.NewBlock(block)
+		size += 81
 	}
 	return nil
 }

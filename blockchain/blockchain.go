@@ -104,7 +104,6 @@ func bootstrapBlockChain() {
 
 func NewBlock(block *Block) {
 	block.Hash = block.GetHash()
-	fmt.Println("adding block")
 	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
@@ -113,7 +112,6 @@ func NewBlock(block *Block) {
 	if block.Transactions != nil {
 		tx = 1
 	}
-	fmt.Printf("block height is %v\n", block.Height)
 	_, err := db.Exec(statement, block.Height, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
