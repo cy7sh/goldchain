@@ -192,7 +192,7 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		}
 		copy(block.PrevHash[:], prevBlock)
 		copy(block.MerkleRoot[:], merkleRoot)
-		go blockchain.NewBlock(block)
+		blockchain.NewBlock(block)
 		size += 81
 	}
 	return nil
