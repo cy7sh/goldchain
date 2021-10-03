@@ -118,8 +118,6 @@ func (p *Peer) listener(c chan string) {
 			singleHash := sha256.Sum256(payload)
 			doubleHash := sha256.Sum256(singleHash[:])
 			if !bytes.Equal(checksum, doubleHash[:4]){
-				if command == "headers" {
-				}
 				continue
 			}
 		}
@@ -146,6 +144,7 @@ func (p *Peer) listener(c chan string) {
 				c <- "pong"
 			}
 		case "headers":
+			fmt.Println("yay! got headers")
 			err := p.parseHeaders(payload)
 			if err != nil {
 				fmt.Println(err)
@@ -193,7 +192,6 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		}
 		copy(block.PrevHash[:], prevBlock)
 		copy(block.MerkleRoot[:], merkleRoot)
-		blockchain.RefreshLastBlock()
 		go blockchain.NewBlock(block)
 		size += 81
 	}

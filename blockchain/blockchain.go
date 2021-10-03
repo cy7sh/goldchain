@@ -10,12 +10,14 @@ import (
 	"os"
 
 	_ "github.com/mattn/go-sqlite3"
+//	"github.com/davecgh/go-spew/spew"
 )
 
-var Blockchain []Block
 var db *sql.DB
 var LastBlock *Block
 var rootPath string // where the blockchain sould be stored
+
+var OrphanBlocks = make([]*Block, 0)
 
 func Start() {
 	home, err := os.UserHomeDir()
@@ -42,27 +44,30 @@ func Start() {
 	}
 	db.SetMaxOpenConns(1)
 	// create blockchain table if does not exist
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
 	if err != nil {
 		fmt.Println(err)
 	}
-	RefreshLastBlock()
+	err = RefreshLastBlock()
+	if err != nil {
+		bootstrapBlockChain()
+	}
+	go processOrphans()
 }
 
-func RefreshLastBlock() {
+func RefreshLastBlock() error {
 	// get the block with biggest height
-	lastBlockRow := db.QueryRow("SELECT hash, prev_hash, merkle_root, time, bits, nonce, tx FROM blockchain ORDER BY height DESC LIMIT 1;")
+	lastBlockRow := db.QueryRow("SELECT * FROM blockchain ORDER BY height DESC LIMIT 1;")
 	var err error
 	LastBlock, err = getBlockFromRow(lastBlockRow)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			bootstrapBlockChain()
-			RefreshLastBlock()
+			return err
 		} else {
 			panic(err)
 		}
 	}
-
+	return nil
 }
 
 func bootstrapBlockChain() {
@@ -103,7 +108,15 @@ func bootstrapBlockChain() {
 
 func NewBlock(block *Block) {
 	block.Hash = block.GetHash()
-	statement := "INSERT INTO blockchain (hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+	// this is not genesis
+	if LastBlock != nil {
+		if !bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
+			OrphanBlocks = append(OrphanBlocks, block)
+			return
+		}
+		block.Height = LastBlock.Height + 1
+	}
+	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
@@ -111,12 +124,13 @@ func NewBlock(block *Block) {
 	if block.Transactions != nil {
 		tx = 1
 	}
-	_, err := db.Exec(statement, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
+	_, err := db.Exec(statement, block.Height, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
 	}
 	// if this is only a header
 	if tx == 0{
+		RefreshLastBlock()
 		return
 	}
 	txFile, err := os.Create(rootPath + "transactions/" + hashHex)
@@ -125,6 +139,18 @@ func NewBlock(block *Block) {
 	}
 	encode := gob.NewEncoder(txFile)
 	encode.Encode(block.Transactions)
+	RefreshLastBlock()
+}
+
+func processOrphans() {
+	for {
+		for i, block := range OrphanBlocks {
+			if bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
+				NewBlock(block)
+				OrphanBlocks = append(OrphanBlocks[:i], OrphanBlocks[i+1:]...)
+			}
+		}
+	}
 }
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {
@@ -132,11 +158,13 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	var hashHex string
 	var prevHashHex string
 	var merkleRootHex string
+	var height int
 	var tx int
-	err := row.Scan(&hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
+	err := row.Scan(&height, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
 	if err != nil {
 		return nil, err
 	}
+	block.Height = height
 	hash, err := hex.DecodeString(hashHex)
 	prevHash, err := hex.DecodeString(prevHashHex)
 	if err != nil {
