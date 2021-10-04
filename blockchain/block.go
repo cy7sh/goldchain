@@ -8,6 +8,7 @@ import (
 
 type Block struct {
 	Height int
+	Version int
 	Hash [32]byte
 	PrevHash [32]byte
 	MerkleRoot [32]byte
@@ -38,7 +39,7 @@ type TxOut struct {
 
 func (b *Block) GetHash() [32]byte {
 	var headerBuff bytes.Buffer
-	binary.Write(&headerBuff, binary.LittleEndian, int32(1))
+	binary.Write(&headerBuff, binary.LittleEndian, int32(b.Version))
 	headerBuff.Write(b.PrevHash[:])
 	headerBuff.Write(b.MerkleRoot[:])
 	binary.Write(&headerBuff, binary.LittleEndian, uint32(b.Time))

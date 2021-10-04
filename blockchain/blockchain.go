@@ -44,7 +44,7 @@ func Start() {
 	}
 	db.SetMaxOpenConns(1)
 	// create blockchain table if does not exist
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS blockchain (height INTEGER PRIMARY KEY, version INTEGER, hash TEXT, prev_hash TEXT, merkle_root TEXT, time INTEGER, bits INTEGER, nonce INTEGER, tx INTEGER)")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -88,6 +88,7 @@ func bootstrapBlockChain() {
 		panic(err)
 	}
 	genesis := &Block{
+		Version: 1,
 		Time: 1231006505,
 		Bits: 0x1d00ffff,
 		Nonce: 2083236893,
@@ -106,17 +107,23 @@ func bootstrapBlockChain() {
 }
 
 func NewBlock(block *Block) {
+	block.Hash = block.GetHash()
 	// this is not genesis
 	if LastBlock != nil {
 		if !bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
+			// is this block already an orphan
+			for _, orphan := range OrphanBlocks {
+				if bytes.Equal(block.Hash[:], orphan.Hash[:]) {
+					return
+				}
+			}
 			fmt.Println("found an orphan")
 			OrphanBlocks = append(OrphanBlocks, block)
 			return
 		}
 		block.Height = LastBlock.Height + 1
 	}
-	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-	block.Hash = block.GetHash()
+	statement := "INSERT INTO blockchain (height, version, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
@@ -124,7 +131,7 @@ func NewBlock(block *Block) {
 	if block.Transactions != nil {
 		tx = 1
 	}
-	_, err := db.Exec(statement, block.Height, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
+	_, err := db.Exec(statement, block.Height, block.Version, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
 	}
@@ -159,12 +166,14 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 	var prevHashHex string
 	var merkleRootHex string
 	var height int
+	var version int
 	var tx int
-	err := row.Scan(&height, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
+	err := row.Scan(&height, &version, &hashHex, &prevHashHex, &merkleRootHex, &block.Time, &block.Bits, &block.Nonce, &tx)
 	if err != nil {
 		return nil, err
 	}
 	block.Height = height
+	block.Version = version
 	hash, err := hex.DecodeString(hashHex)
 	prevHash, err := hex.DecodeString(prevHashHex)
 	if err != nil {

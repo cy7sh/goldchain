@@ -85,6 +85,10 @@ func (p *Peer) listener(c chan string) {
 			p.hc <- "closed"
 			return
 		}
+		// should be atleast the size of the bitcoin message structure
+		if n < 24 {
+			continue
+		}
 		// check if this is a bitcoin message
 		magic := binary.LittleEndian.Uint32(buf[:4])
 		if !(magic == 0xD9B4BEF9 || magic == 0xDAB5BFFA || magic == 0x0709110B || magic == 0x40CF030A || magic == 0xFEB4BEF9) {
@@ -180,12 +184,14 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		return err
 	}
 	for i := 0; i < count; i++ {
+		version := int(binary.LittleEndian.Uint32(payload[size:size + 4]))
 		prevBlock := payload[size + 4:size + 36]
 		merkleRoot := payload[size + 36:size + 68]
 		timestamp := int(binary.LittleEndian.Uint32(payload[size + 68:size + 72]))
 		bits := int(binary.LittleEndian.Uint32(payload[size + 72:size + 76]))
 		nonce := int(binary.LittleEndian.Uint32(payload[size + 76:size + 80]))
 		block := &blockchain.Block{
+			Version: version,
 			Time: timestamp,
 			Bits: bits,
 			Nonce: nonce,
