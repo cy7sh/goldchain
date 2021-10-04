@@ -195,6 +195,7 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		blockchain.NewBlock(block)
 		size += 81
 	}
+	headers <- "finished"
 	return nil
 }
 

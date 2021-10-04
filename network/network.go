@@ -32,6 +32,8 @@ type Node struct {
 
 var maxPeers = 50
 
+var headers = make(chan string)
+
 func Start() {
 	seeds = []string{"seed.bitcoin.sipa.be", "dnsseed.bluematt.me", "dnsseed.bitcoin.dashjr.org", "seed.bitcoinstats.com", "seed.bitcoin.jonasschnelli.ch", "seed.btc.petertodd.org", "seed.bitcoin.sprovoost.nl", "dnsseed.emzy.de", "seed.bitcoin.wiz.biz"}
 	getNodes()
@@ -96,8 +98,18 @@ func NewNode(address []byte, port int) {
 }
 
 func fillBlockchain() {
-	fmt.Println("sending getheaders")
-	Peers[0].SendGetHeaders(blockchain.LastBlock.Hash, [32]byte{})
+	for _, peer := range Peers {
+		for {
+			fmt.Println("sending getheaders")
+			peer.SendGetHeaders(blockchain.LastBlock.Hash, [32]byte{})
+			select {
+			case <-headers:
+				continue
+			case <-time.After(time.Minute):
+				break
+			}
+		}
+	}
 }
 
 func (n *Node) connect() {

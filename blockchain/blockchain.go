@@ -48,14 +48,13 @@ func Start() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	err = RefreshLastBlock()
+	err = refreshLastBlock()
 	if err != nil {
 		bootstrapBlockChain()
 	}
-	go processOrphans()
 }
 
-func RefreshLastBlock() error {
+func refreshLastBlock() error {
 	// get the block with biggest height
 	lastBlockRow := db.QueryRow("SELECT * FROM blockchain ORDER BY height DESC LIMIT 1;")
 	var err error
@@ -107,16 +106,17 @@ func bootstrapBlockChain() {
 }
 
 func NewBlock(block *Block) {
-	block.Hash = block.GetHash()
 	// this is not genesis
 	if LastBlock != nil {
 		if !bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
+			fmt.Println("found an orphan")
 			OrphanBlocks = append(OrphanBlocks, block)
 			return
 		}
 		block.Height = LastBlock.Height + 1
 	}
 	statement := "INSERT INTO blockchain (height, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+	block.Hash = block.GetHash()
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
 	merkleRootHex := hex.EncodeToString(block.MerkleRoot[:])
@@ -130,7 +130,7 @@ func NewBlock(block *Block) {
 	}
 	// if this is only a header
 	if tx == 0{
-		RefreshLastBlock()
+		refreshLastBlock()
 		return
 	}
 	txFile, err := os.Create(rootPath + "transactions/" + hashHex)
@@ -139,16 +139,16 @@ func NewBlock(block *Block) {
 	}
 	encode := gob.NewEncoder(txFile)
 	encode.Encode(block.Transactions)
-	RefreshLastBlock()
+	refreshLastBlock()
+	processOrphans()
 }
 
 func processOrphans() {
-	for {
-		for i, block := range OrphanBlocks {
-			if bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
-				NewBlock(block)
-				OrphanBlocks = append(OrphanBlocks[:i], OrphanBlocks[i+1:]...)
-			}
+	for i, block := range OrphanBlocks {
+		if bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
+			fmt.Println("found a parent")
+			NewBlock(block)
+			OrphanBlocks = append(OrphanBlocks[:i], OrphanBlocks[i+1:]...)
 		}
 	}
 }
