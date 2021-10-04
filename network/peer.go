@@ -183,6 +183,10 @@ func (p *Peer) parseHeaders(payload []byte) error {
 	if err != nil {
 		return err
 	}
+	if count == 0 {
+		headers <- "best"
+		return nil
+	}
 	for i := 0; i < count; i++ {
 		version := int(binary.LittleEndian.Uint32(payload[size:size + 4]))
 		prevBlock := payload[size + 4:size + 36]

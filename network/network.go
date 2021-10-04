@@ -103,12 +103,19 @@ func fillBlockchain() {
 			fmt.Println("sending getheaders")
 			peer.SendGetHeaders(blockchain.LastBlock.Hash, [32]byte{})
 			select {
-			case <-headers:
-				continue
-			case <-time.After(time.Minute):
-				break
+			case msg := <-headers:
+				switch msg {
+				case "finished":
+					continue
+				case "best":
+					goto next
+				}
+			case <-time.After(15 * time.Second):
+				// not actually best but works
+				goto next
 			}
 		}
+next:
 	}
 }
 
