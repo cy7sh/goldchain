@@ -51,12 +51,3 @@ func (b *Block) GetHash() [32]byte {
 	double := sha256.Sum256(single[:])
 	return double
 }
-
-func byteToLittleEndian(data []byte) []byte {
-	s := make([]byte, 0)
-	copy(s, data)
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-	    s[i], s[j] = s[j], s[i]
-	}
-	return s
-}

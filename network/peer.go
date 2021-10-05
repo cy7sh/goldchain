@@ -148,7 +148,6 @@ func (p *Peer) listener(c chan string) {
 				c <- "pong"
 			}
 		case "headers":
-			fmt.Println("yay! got headers")
 			err := p.parseHeaders(payload)
 			if err != nil {
 				fmt.Println(err)

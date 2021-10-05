@@ -100,7 +100,6 @@ func NewNode(address []byte, port int) {
 func fillBlockchain() {
 	for _, peer := range Peers {
 		for {
-			fmt.Println("sending getheaders")
 			peer.SendGetHeaders(blockchain.LastBlock.Hash, [32]byte{})
 			select {
 			case msg := <-headers:

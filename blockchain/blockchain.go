@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"math/big"
 
 	_ "github.com/mattn/go-sqlite3"
 //	"github.com/davecgh/go-spew/spew"
@@ -107,6 +108,12 @@ func bootstrapBlockChain() {
 }
 
 func NewBlock(block *Block) {
+	block.Hash = block.GetHash()
+	// check if PoW is valid
+	if !verifyPoW(block) {
+		fmt.Println("got invalid PoW")
+		return
+	}
 	// this is not genesis
 	if LastBlock != nil {
 		if !bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
@@ -122,7 +129,6 @@ func NewBlock(block *Block) {
 		}
 		block.Height = LastBlock.Height + 1
 	}
-	block.Hash = block.GetHash()
 	statement := "INSERT INTO blockchain (height, version, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
@@ -198,4 +204,76 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 		}
 	}
 	return block, nil
+}
+
+func verifyPoW(block *Block) bool {
+	target := compactToBig(uint32(block.Bits))
+	hashNum := hashToBig(block.Hash)
+	if hashNum.Cmp(target) > 0 {
+		return false
+	}
+	return true
+}
+
+// CompactToBig converts a compact representation of a whole number N to an
+// unsigned 32-bit number.  The representation is similar to IEEE754 floating
+// point numbers.
+//
+// Like IEEE754 floating point, there are three basic components: the sign,
+// the exponent, and the mantissa.  They are broken out as follows:
+//
+//	* the most significant 8 bits represent the unsigned base 256 exponent
+// 	* bit 23 (the 24th bit) represents the sign bit
+//	* the least significant 23 bits represent the mantissa
+//
+//	-------------------------------------------------
+//	|   Exponent     |    Sign    |    Mantissa     |
+//	-------------------------------------------------
+//	| 8 bits [31-24] | 1 bit [23] | 23 bits [22-00] |
+//	-------------------------------------------------
+//
+// The formula to calculate N is:
+// 	N = (-1^sign) * mantissa * 256^(exponent-3)
+//
+// This compact form is only used in bitcoin to encode unsigned 256-bit numbers
+// which represent difficulty targets, thus there really is not a need for a
+// sign bit, but it is implemented here to stay consistent with bitcoind.
+func compactToBig(compact uint32) *big.Int {
+	// Extract the mantissa, sign bit, and exponent.
+	mantissa := compact & 0x007fffff
+	isNegative := compact&0x00800000 != 0
+	exponent := uint(compact >> 24)
+
+	// Since the base for the exponent is 256, the exponent can be treated
+	// as the number of bytes to represent the full 256-bit number.  So,
+	// treat the exponent as the number of bytes and shift the mantissa
+	// right or left accordingly.  This is equivalent to:
+	// N = mantissa * 256^(exponent-3)
+	var bn *big.Int
+	if exponent <= 3 {
+		mantissa >>= 8 * (3 - exponent)
+		bn = big.NewInt(int64(mantissa))
+	} else {
+		bn = big.NewInt(int64(mantissa))
+		bn.Lsh(bn, 8*(exponent-3))
+	}
+
+	// Make it negative if the sign bit is set.
+	if isNegative {
+		bn = bn.Neg(bn)
+	}
+
+	return bn
+}
+
+// HashToBig converts a block.Hash into a big.Int that can be used to
+// perform math comparisons.
+func hashToBig(hash [32]byte) *big.Int {
+	// A Hash is in little-endian, but the big package wants the bytes in
+	// big-endian, so reverse them.
+	for i := 0; i < 32/2; i++ {
+		hash[i], hash[32-1-i] = hash[32-1-i], hash[i]
+	}
+
+	return new(big.Int).SetBytes(hash[:])
 }
