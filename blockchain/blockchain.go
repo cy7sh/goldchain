@@ -10,12 +10,14 @@ import (
 	"os"
 	"math/big"
 
+//	"github.com/btcsuite/btcd/txscript"
 	_ "github.com/mattn/go-sqlite3"
 //	"github.com/davecgh/go-spew/spew"
 )
 
 var db *sql.DB
 var LastBlock *Block
+var LastHeader *Block
 var rootPath string // where the blockchain sould be stored
 
 var OrphanBlocks = make([]*Block, 0)
@@ -52,6 +54,17 @@ func Start() {
 	err = refreshLastBlock()
 	if err != nil {
 		bootstrapBlockChain()
+	}
+	refreshLastHeader()
+}
+
+func refreshLastHeader() {
+	// get the header with biggest height
+	lastBlockRow := db.QueryRow("SELECT * FROM blockchain WHERE tx = 1 ORDER BY height DESC LIMIT 1;")
+	var err error
+	LastHeader, err = getBlockFromRow(lastBlockRow)
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -109,6 +122,15 @@ func bootstrapBlockChain() {
 
 func NewBlock(block *Block) {
 	block.Hash = block.GetHash()
+	existing, err := getBlockFromHash(block.Hash)
+	// this block already exists
+	if err == nil {
+		// header exists, add transactions
+		if existing.Transactions == nil && block.Transactions != nil {
+			newTransactions(block)
+		}
+		return
+	}
 	// check if PoW is valid
 	if !verifyPoW(block) {
 		fmt.Println("got invalid PoW")
@@ -137,23 +159,30 @@ func NewBlock(block *Block) {
 	if block.Transactions != nil {
 		tx = 1
 	}
-	_, err := db.Exec(statement, block.Height, block.Version, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
+	_, err = db.Exec(statement, block.Height, block.Version, hashHex, prevHashHex, merkleRootHex, block.Time, block.Bits, block.Nonce, tx)
 	if err != nil {
 		panic(err)
 	}
 	// if this is only a header
-	if tx == 0{
+	if block.Transactions == nil {
 		refreshLastBlock()
+		refreshLastHeader()
 		return
 	}
+	newTransactions(block)
+	refreshLastBlock()
+	refreshLastHeader()
+	processOrphans()
+}
+
+func newTransactions(block *Block) {
+	hashHex := hex.EncodeToString(block.Hash[:])
 	txFile, err := os.Create(rootPath + "transactions/" + hashHex)
 	if err != nil {
 		panic(err)
 	}
 	encode := gob.NewEncoder(txFile)
 	encode.Encode(block.Transactions)
-	refreshLastBlock()
-	processOrphans()
 }
 
 func processOrphans() {
@@ -164,6 +193,12 @@ func processOrphans() {
 			OrphanBlocks = append(OrphanBlocks[:i], OrphanBlocks[i+1:]...)
 		}
 	}
+}
+
+func getBlockFromHash(hash [32]byte) (*Block, error) {
+	hashHex := hex.EncodeToString(hash[:])
+	statement := "SELECT * WHERE hash = $1"
+	return getBlockFromRow(db.QueryRow(statement, hashHex))
 }
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {

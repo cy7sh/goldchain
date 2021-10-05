@@ -116,6 +116,13 @@ func fillBlockchain() {
 		}
 next:
 	}
+	fmt.Println("fully synced headers chain")
+	// get full blocks
+
+}
+
+func populateHeaders() {
+
 }
 
 func (n *Node) connect() {
