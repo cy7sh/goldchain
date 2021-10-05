@@ -1,1 +1,1 @@
-it just connects to some peers, downloads block headers (doesn't verify them) and puts them on a database. i'm too stupid for it to do anything more than that.
+it just connects to some peers, downloads block headers and puts them on a database. i'm too stupid for it to do anything more than that.
