@@ -107,7 +107,6 @@ func bootstrapBlockChain() {
 }
 
 func NewBlock(block *Block) {
-	block.Hash = block.GetHash()
 	// this is not genesis
 	if LastBlock != nil {
 		if !bytes.Equal(LastBlock.Hash[:], block.PrevHash[:]) {
@@ -123,6 +122,7 @@ func NewBlock(block *Block) {
 		}
 		block.Height = LastBlock.Height + 1
 	}
+	block.Hash = block.GetHash()
 	statement := "INSERT INTO blockchain (height, version, hash, prev_hash, merkle_root, time, bits, nonce, tx) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
 	hashHex := hex.EncodeToString(block.Hash[:])
 	prevHashHex := hex.EncodeToString(block.PrevHash[:])
