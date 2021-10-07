@@ -297,3 +297,19 @@ func WriteGetHeaders(w io.Writer, protocolVersion int, start [32]byte, end [32]b
 	}
 	return writeMsg(w, "getheaders", payload)
 }
+
+func WriteGetData(w io.Writer, inventory []byte) error {
+	var payloadBuffer bytes.Buffer
+	count := len(inventory)/36
+	err := writeVarInt(&payloadBuffer, count)
+	if err != nil {
+		return err
+	}
+	_, err = payloadBuffer.Write(inventory)
+	if err != nil {
+		return err
+	}
+	payload := make([]byte, payloadBuffer.Len())
+	payloadBuffer.Read(payload)
+	return writeMsg(w, "getdata", payload)
+}

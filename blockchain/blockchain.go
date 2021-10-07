@@ -17,7 +17,7 @@ import (
 
 var db *sql.DB
 var LastBlock *Block
-var LastHeader *Block
+var FirstHeader *Block
 var rootPath string // where the blockchain sould be stored
 
 var OrphanBlocks = make([]*Block, 0)
@@ -55,17 +55,13 @@ func Start() {
 	if err != nil {
 		bootstrapBlockChain()
 	}
-	refreshLastHeader()
+	refreshFirstHeader()
 }
 
-func refreshLastHeader() {
-	// get the header with biggest height
-	lastBlockRow := db.QueryRow("SELECT * FROM blockchain WHERE tx = 1 ORDER BY height DESC LIMIT 1;")
-	var err error
-	LastHeader, err = getBlockFromRow(lastBlockRow)
-	if err != nil {
-		panic(err)
-	}
+func refreshFirstHeader() {
+	// get the first header-only block from the chain
+	firstHeaderRow := db.QueryRow("SELECT * FROM blockchain WHERE tx = 1 ORDER BY height LIMIT 1")
+	FirstHeader, _ = getBlockFromRow(firstHeaderRow)
 }
 
 func refreshLastBlock() error {
@@ -166,23 +162,24 @@ func NewBlock(block *Block) {
 	// if this is only a header
 	if block.Transactions == nil {
 		refreshLastBlock()
-		refreshLastHeader()
+		refreshFirstHeader()
 		return
 	}
 	newTransactions(block)
 	refreshLastBlock()
-	refreshLastHeader()
+	refreshFirstHeader()
 	processOrphans()
 }
 
-func newTransactions(block *Block) {
+func newTransactions(block *Block) error {
 	hashHex := hex.EncodeToString(block.Hash[:])
 	txFile, err := os.Create(rootPath + "transactions/" + hashHex)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	encode := gob.NewEncoder(txFile)
 	encode.Encode(block.Transactions)
+	return nil
 }
 
 func processOrphans() {
@@ -197,8 +194,31 @@ func processOrphans() {
 
 func getBlockFromHash(hash [32]byte) (*Block, error) {
 	hashHex := hex.EncodeToString(hash[:])
-	statement := "SELECT * WHERE hash = $1"
+	statement := "SELECT * FROM blockchain WHERE hash = $1"
 	return getBlockFromRow(db.QueryRow(statement, hashHex))
+}
+
+func getBlockFromHeight(height int) (*Block, error) {
+	statement := "SELECT * FROM blockchain WHERE height = $1"
+	return getBlockFromRow(db.QueryRow(statement, height))
+}
+
+func GetNBlockHashesAfter(start [32]byte, n int) ([][32]byte, error) {
+	blocks := make([][32]byte, 0)
+	startBlock, err := getBlockFromHash(start)
+	if err != nil {
+		return nil, err
+	}
+	startHeight := startBlock.Height + 1
+	stopHeight := startHeight + n
+	for i := startHeight; i < stopHeight; i++ {
+		block, err := getBlockFromHeight(i)
+		if err != nil {
+			break
+		}
+		blocks = append(blocks, block.Hash)
+	}
+	return blocks, nil
 }
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {
@@ -235,7 +255,7 @@ func getBlockFromRow(row *sql.Row) (*Block, error) {
 		decode := gob.NewDecoder(bytes.NewReader(txFile))
 		err = decode.Decode(&block.Transactions)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 	return block, nil

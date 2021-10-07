@@ -49,6 +49,7 @@ func Start() {
 		}
 	}
 	go fillBlockchain()
+	go populateHeaders()
 }
 
 func getNodes() {
@@ -117,12 +118,37 @@ func fillBlockchain() {
 next:
 	}
 	fmt.Println("fully synced headers chain")
-	// get full blocks
-
 }
 
 func populateHeaders() {
-
+	for {
+		// no unpopulated headers
+		if blockchain.FirstHeader == nil {
+			continue
+		}
+		blocks := make([][32]byte, 0)
+		blocks = append(blocks, blockchain.FirstHeader.Hash)
+		blocksAfter, err := blockchain.GetNBlockHashesAfter(blocks[0], 15)
+		if err != nil {
+			fmt.Println("failed to fetch headers", err)
+			continue
+		}
+		blocks = append(blocks, blocksAfter...)
+		for _, peer := range Peers {
+			err = peer.GetBlocks(blocks)
+			if err != nil {
+				fmt.Println("failed to request blocks", err)
+				continue
+			}
+			blocksAfter, err = blockchain.GetNBlockHashesAfter(blocks[len(blocks)-1], 16)
+			if err != nil {
+				fmt.Println("failed to fetch headers", err)
+				break
+			}
+			blocks = make([][32]byte, 0)
+			blocks = append(blocks, blocksAfter...)
+		}
+	}
 }
 
 func (n *Node) connect() {

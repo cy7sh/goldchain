@@ -281,3 +281,17 @@ func (p *Peer) SendGetHeaders(start [32]byte, end [32]byte) {
 		p.hc <- "closed"
 	}
 }
+
+func (p *Peer) GetBlocks(blocks [][32]byte) error {
+	var inventoryBuffer bytes.Buffer
+	binary.Write(&inventoryBuffer, binary.LittleEndian, uint32(2))
+	for _, block := range blocks {
+		inventoryBuffer.Write(block[:])
+	}
+	inventory := make([]byte, inventoryBuffer.Len())
+	_, err := inventoryBuffer.Read(inventory)
+	if err != nil {
+		return err
+	}
+	return wire.WriteGetData(p.Conn, inventory)
+}
