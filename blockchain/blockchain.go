@@ -117,7 +117,9 @@ func bootstrapBlockChain() {
 }
 
 func NewBlock(block *Block) {
-	block.Hash = block.GetHash()
+	if block.Hash == [32]byte{} {
+		block.Hash = block.GetHash()
+	}
 	existing, err := getBlockFromHash(block.Hash)
 	// this block already exists
 	if err == nil {
@@ -219,6 +221,21 @@ func GetNBlockHashesAfter(start [32]byte, n int) ([][32]byte, error) {
 		blocks = append(blocks, block.Hash)
 	}
 	return blocks, nil
+}
+
+func GetBlockAfter(hash [32]byte) (*Block, error) {
+	afterHash, err := GetNBlockHashesAfter(hash, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(afterHash) < 1 {
+		return nil, errors.New("no block found")
+	}
+	afterBlock, err := getBlockFromHash(afterHash[0])
+	if err != nil {
+		return nil, err
+	}
+	return afterBlock, nil
 }
 
 func getBlockFromRow(row *sql.Row) (*Block, error) {

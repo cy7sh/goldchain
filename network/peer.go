@@ -153,6 +153,12 @@ func (p *Peer) listener(c chan string) {
 				fmt.Println(err)
 				continue
 			}
+		case "block":
+			err := p.parseBlock(payload)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
 		}
 	}
 }
@@ -205,6 +211,90 @@ func (p *Peer) parseHeaders(payload []byte) error {
 		size += 81
 	}
 	headers <- "finished"
+	return nil
+}
+
+func (p *Peer) parseBlock(payload []byte) error {
+	fmt.Println("parsing block")
+	var prevHash [32]byte
+	copy(prevHash[:], payload[4:36])
+	block, err := blockchain.GetBlockAfter(prevHash)
+	if err != nil {
+		return err
+	}
+	// only care about transactions
+	block.Transactions = make([]*blockchain.Transaction, 0)
+	// parse transactions
+	count, size, err := wire.ReadVarInt(payload[80:])
+	payload = payload[80+size:]
+	for i := 0; i < count; i++ {
+		transaction := &blockchain.Transaction{}
+		transaction.Version = int(binary.LittleEndian.Uint32(payload[:4]))
+		payload = payload[4:]
+		if bytes.Equal(payload[:2], []byte{0x00, 0x01}) {
+			transaction.Flag = [2]uint8{0x00, 0x01}
+			payload = payload[2:]
+		}
+		// txIn
+		count2, size, err := wire.ReadVarInt(payload)
+		if err != nil {
+			return err
+		}
+		payload = payload[size:]
+		for j := 0; j < count2; j++ {
+			txIn := &blockchain.TxIn{}
+			prevTxHash := payload[:32]
+			copy(txIn.PrevTxHash[:], prevTxHash)
+			txIn.PrevTxIndex = int(binary.LittleEndian.Uint32(payload[32:36]))
+			txScriptLen, size, err := wire.ReadVarInt(payload[36:])
+			if err != nil {
+				return err
+			}
+			payload = payload[36+size:]
+			txIn.Script = payload[:txScriptLen]
+			sequence := payload[txScriptLen:txScriptLen+4]
+			copy(txIn.Sequence[:], sequence)
+			payload = payload[txScriptLen+4:]
+			transaction.Inputs = append(transaction.Inputs, txIn)
+		}
+		// txOut
+		count2, size, err = wire.ReadVarInt(payload)
+		if err != nil {
+			return err
+		}
+		payload = payload[size:]
+		for k := 0; k < count2; k++ {
+			txOut := &blockchain.TxOut{}
+			txOut.Value = int(binary.LittleEndian.Uint64(payload[:8]))
+			txOutScriptLen, size, err := wire.ReadVarInt(payload[8:])
+			if err != nil {
+				return err
+			}
+			txOut.Script = payload[8+size:8+size+txOutScriptLen]
+			payload = payload[8+size+txOutScriptLen:]
+			transaction.Outputs = append(transaction.Outputs, txOut)
+		}
+		// segregated witness
+		count2, size, err = wire.ReadVarInt(payload)
+		if err != nil {
+			return err
+		}
+		payload = payload[size:]
+		for l := 0; l < count2; l++ {
+			componentLen, size, err  := wire.ReadVarInt(payload)
+			if err != nil {
+				return err
+			}
+			payload = payload[size:]
+			component := payload[:componentLen]
+			transaction.Witnesses = append(transaction.Witnesses, component)
+			payload = payload[componentLen:]
+		}
+		transaction.LockTime = int(binary.LittleEndian.Uint32(payload[:4]))
+		block.Transactions = append(block.Transactions, transaction)
+	}
+	fmt.Println("adding block to db")
+	blockchain.NewBlock(block)
 	return nil
 }
 

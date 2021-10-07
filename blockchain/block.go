@@ -19,9 +19,11 @@ type Block struct {
 }
 
 type Transaction struct {
-	Flag [2]byte
+	Version int
+	Flag [2]uint8
 	Inputs []*TxIn
 	Outputs []*TxOut
+	Witnesses [][]byte
 	LockTime int
 }
 
