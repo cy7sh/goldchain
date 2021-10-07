@@ -14,6 +14,7 @@ import (
 
 	"github.com/singurty/goldchain/blockchain"
 	"github.com/singurty/goldchain/wire"
+//	"github.com/davecgh/go-spew/spew"
 )
 
 type Peer struct {
@@ -154,6 +155,7 @@ func (p *Peer) listener(c chan string) {
 				continue
 			}
 		case "block":
+			fmt.Printf("checksum: %x\n", checksum)
 			err := p.parseBlock(payload)
 			if err != nil {
 				fmt.Println(err)
@@ -222,10 +224,16 @@ func (p *Peer) parseBlock(payload []byte) error {
 	if err != nil {
 		return err
 	}
+	fmt.Printf("populating block %x\n", block.Hash)
+	fmt.Printf("merkleRoot: %x\n", block.MerkleRoot)
 	// only care about transactions
 	block.Transactions = make([]*blockchain.Transaction, 0)
 	// parse transactions
 	count, size, err := wire.ReadVarInt(payload[80:])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("got %v transactions\n", count)
 	payload = payload[80+size:]
 	for i := 0; i < count; i++ {
 		transaction := &blockchain.Transaction{}
@@ -240,6 +248,7 @@ func (p *Peer) parseBlock(payload []byte) error {
 		if err != nil {
 			return err
 		}
+		fmt.Printf("got %v inputs\n", count2)
 		payload = payload[size:]
 		for j := 0; j < count2; j++ {
 			txIn := &blockchain.TxIn{}
@@ -262,6 +271,7 @@ func (p *Peer) parseBlock(payload []byte) error {
 		if err != nil {
 			return err
 		}
+		fmt.Printf("got %v outputs\n", count2)
 		payload = payload[size:]
 		for k := 0; k < count2; k++ {
 			txOut := &blockchain.TxOut{}
@@ -279,7 +289,10 @@ func (p *Peer) parseBlock(payload []byte) error {
 		if err != nil {
 			return err
 		}
-		payload = payload[size:]
+		fmt.Printf("got %v witnesses\n", count2)
+		if count2 > 0 {
+			payload = payload[size:]
+		}
 		for l := 0; l < count2; l++ {
 			componentLen, size, err  := wire.ReadVarInt(payload)
 			if err != nil {
@@ -291,6 +304,7 @@ func (p *Peer) parseBlock(payload []byte) error {
 			payload = payload[componentLen:]
 		}
 		transaction.LockTime = int(binary.LittleEndian.Uint32(payload[:4]))
+		payload = payload[4:]
 		block.Transactions = append(block.Transactions, transaction)
 	}
 	fmt.Println("adding block to db")
